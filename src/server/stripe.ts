@@ -1,6 +1,7 @@
 import "server-only";
 
 import Stripe from "stripe";
+import { parseSiteUrl } from "@/lib/site-url";
 
 export function stripeClient() {
   const key = process.env.STRIPE_SECRET_KEY?.trim();
@@ -11,7 +12,7 @@ export function stripeClient() {
 export function appUrl() {
   const value = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (!value) throw new Error("NEXT_PUBLIC_APP_URL is not configured");
-  const url = new URL(value);
-  if (!new Set(["http:", "https:"]).has(url.protocol)) throw new Error("NEXT_PUBLIC_APP_URL must use HTTP or HTTPS");
-  return url.origin;
+  const resolved = parseSiteUrl(value);
+  if (!resolved) throw new Error("NEXT_PUBLIC_APP_URL must be a valid HTTP(S) URL");
+  return resolved;
 }

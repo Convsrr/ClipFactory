@@ -32,13 +32,41 @@ const transcriptWord = v.object({
 const analysedCandidate = v.object({
   startSec: v.number(),
   endSec: v.number(),
+  durationSec: v.optional(v.number()),
   score: v.number(),
+  modelScore: v.optional(v.number()),
+  confidence: v.optional(v.number()),
   hook: v.string(),
   title: v.string(),
+  description: v.optional(v.string()),
   reason: v.string(),
   summary: v.string(),
   category: v.string(),
   transcriptExcerpt: v.string(),
+  dimensions: v.optional(v.object({
+    hookStrength: v.number(),
+    emotionalImpact: v.number(),
+    curiosity: v.number(),
+    value: v.number(),
+    storytelling: v.number(),
+    novelty: v.number(),
+    standaloneContext: v.number(),
+    payoff: v.number(),
+    shareability: v.number(),
+  })),
+  scoreBreakdown: v.optional(v.object({
+    hookStrength: v.number(),
+    emotionalImpact: v.number(),
+    curiosity: v.number(),
+    value: v.number(),
+    storytelling: v.number(),
+    novelty: v.number(),
+    standaloneContext: v.number(),
+    payoff: v.number(),
+    shareability: v.number(),
+    confidence: v.number(),
+    durationFit: v.number(),
+  })),
 });
 
 export default defineSchema({
@@ -125,15 +153,31 @@ export default defineSchema({
 
   analysisRuns: defineTable({
     projectId: v.id("projects"),
-    transcriptId: v.id("transcripts"),
+    transcriptId: v.optional(v.id("transcripts")),
     provider: v.string(),
     model: v.string(),
     promptVersion: v.string(),
-    rawResponse: v.string(),
+    inputMetadata: v.optional(v.object({
+      videoId: v.id("videos"),
+      segmentCount: v.number(),
+      wordCount: v.number(),
+      inputCharacterCount: v.number(),
+      chunkCount: v.number(),
+      maxCandidates: v.number(),
+      videoDurationSec: v.union(v.number(), v.null()),
+    })),
+    rawResponse: v.optional(v.string()),
+    rawResponseTruncated: v.optional(v.boolean()),
     parsedOutput: v.array(analysedCandidate),
     status: jobStatus,
     errorMessage: v.optional(v.string()),
+    candidateCount: v.optional(v.number()),
+    acceptedCount: v.optional(v.number()),
+    rejectionCount: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
     createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
   })
     .index("by_projectId", ["projectId"])
     .index("by_transcriptId", ["transcriptId"])
@@ -147,6 +191,21 @@ export default defineSchema({
     endSec: v.number(),
     durationSec: v.number(),
     score: v.number(),
+    confidence: v.optional(v.number()),
+    scoreBreakdown: v.optional(v.object({
+      hookStrength: v.number(),
+      emotionalImpact: v.number(),
+      curiosity: v.number(),
+      value: v.number(),
+      storytelling: v.number(),
+      novelty: v.number(),
+      standaloneContext: v.number(),
+      payoff: v.number(),
+      shareability: v.number(),
+      confidence: v.number(),
+      durationFit: v.number(),
+    })),
+    analysisRunId: v.optional(v.id("analysisRuns")),
     title: v.string(),
     hook: v.string(),
     description: v.string(),
@@ -169,6 +228,7 @@ export default defineSchema({
   })
     .index("by_projectId", ["projectId"])
     .index("by_videoId", ["videoId"])
+    .index("by_analysisRunId", ["analysisRunId"])
     .index("by_userId", ["userId"])
     .index("by_projectId_and_status", ["projectId", "status"])
     .index("by_status", ["status"]),

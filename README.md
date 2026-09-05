@@ -86,12 +86,20 @@ Set the server-side g0i.ai and worker values in the Convex deployment as well as
 ```bash
 npx convex env set G0I_API_KEY your-key
 npx convex env set G0I_BASE_URL https://your-g0i-endpoint.example/v1
+npx convex env set G0I_MODEL_FALLBACKS 'gemini-2.5-flash,deepseek-v4-flash,gemini-2.5-flash-lite'
+npx convex env set G0I_MODEL_ANALYSIS 'gemini-2.5-flash,deepseek-v4-flash,gemini-2.5-flash-lite'
+npx convex env set G0I_MODEL_HOOKS 'gemini-2.5-flash-lite,gemini-2.5-flash,deepseek-v4-flash'
+npx convex env set G0I_MODEL_TITLE 'gemini-2.5-flash-lite,gemini-2.5-flash,deepseek-v4-flash'
+npx convex env set G0I_MODEL_DESCRIPTION 'gemini-2.5-flash-lite,gemini-2.5-flash,deepseek-v4-flash'
+npx convex env set G0I_MODEL_SCORING 'deepseek-v4-flash,gemini-2.5-flash,gemini-2.5-flash-lite'
 npx convex env set WORKER_BASE_URL https://your-worker.example
 npx convex env set WORKER_SHARED_SECRET your-random-secret
 npx convex env set WORKER_CALLBACK_SECRET your-second-random-secret
 ```
 
-Add the model IDs from `.env.example`. The AI client requires an OpenAI-compatible Chat Completions endpoint with JSON-object response support.
+Each model variable is an ordered, comma-separated fallback list. The provider tries the next model when a model returns an HTTP error, empty output, invalid JSON, or JSON that fails the operation schema. The AI client requires an OpenAI-compatible Chat Completions endpoint with JSON-object response support.
+
+Set one `G0I_MODEL` (or `G0I_MODEL_ANALYSIS`) to use the same configured model for every operation; operation-specific variables override it. `G0I_TIMEOUT_MS`, `G0I_MAX_RETRIES`, `G0I_TEMPERATURE`, `G0I_MAX_OUTPUT_TOKENS`, `G0I_MAX_CANDIDATES`, `G0I_MAX_TRANSCRIPT_CHARS`, and `G0I_MAX_RAW_RESPONSE_CHARS` tune the bounded analysis runtime without changing source code.
 
 ### 3. Object storage
 

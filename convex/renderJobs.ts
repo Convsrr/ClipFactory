@@ -31,6 +31,17 @@ export const completeLocal = internalMutation({
   },
 });
 
+export const fail = internalMutation({
+  args: { jobId: v.id("renderJobs"), errorMessage: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.status === "complete" || job.status === "failed") return null;
+    await ctx.db.patch(args.jobId, { status: "failed", errorMessage: args.errorMessage.slice(0, 500), updatedAt: Date.now() });
+    return null;
+  },
+});
+
 export const completeFromWorker = internalMutation({
   args: { jobId: v.string(), workflowId: v.string(), eventName: v.string(), result: stageResultValidator },
   returns: v.null(),
