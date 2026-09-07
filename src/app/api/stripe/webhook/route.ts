@@ -18,7 +18,15 @@ export async function POST(request: Request) {
   if (subscription) {
     const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
     const active = subscription.status === "active" || subscription.status === "trialing";
-    await fetchMutation(api.billing.syncSubscription, { forwardingSecret, stripeCustomerId: customerId, stripeSubscriptionId: subscription.id, subscriptionStatus: subscription.status, plan: active ? "creator" : "free" });
+    await fetchMutation(api.billing.syncSubscription, {
+      forwardingSecret,
+      eventId: event.id,
+      eventType: event.type,
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subscription.id,
+      subscriptionStatus: subscription.status,
+      plan: active ? "creator" : "free",
+    });
   }
   return Response.json({ received: true });
 }

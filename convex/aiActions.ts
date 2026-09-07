@@ -116,6 +116,7 @@ export const regenerateMetadata = action({
   handler: async (ctx, args): Promise<{ value: string }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Authentication required");
+    await ctx.runMutation(internal.abuse.consumeMetadataRegeneration, { userId });
     const clip = await ctx.runQuery(internal.aiData.clipForRegeneration, { clipId: args.clipId });
     if (!clip || clip.userId !== userId) throw new Error("Clip not found");
     const provider = new G0iProvider();

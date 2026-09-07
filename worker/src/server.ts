@@ -1,56 +1,124 @@
-import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+import { checkMediaCapabilities } from "./ffmpeg.js";
+import { classifyWorkerError } from "./errors.js";
+import { loadWorkerConfig } from "./config.js";
+import { claimJob, deliverCallback, sendHeartbeat } from "./control-plane.js";
 import { processJob } from "./pipeline.js";
-import { jobSchema, type WorkerJob } from "./types.js";
+import { storageConfigured } from "./storage.js";
+import { cleanupStaleWorkerDirectories } from "./temp-cleanup.js";
+import type { WorkerJob } from "./types.js";
+import { buildHealthResponse, requiredCapabilitiesReady } from "./health.js";
 
-const port = Number(process.env.WORKER_PORT || 8788);
-const sharedSecret = requiredEnv("WORKER_SHARED_SECRET");
-const maxParallel = Math.max(1, Number(process.env.WORKER_MAX_PARALLEL || 2));
-const queue: Array<{ job: WorkerJob; workerRef: string }> = [];
-let active = 0;
+type ActiveJob = { job: WorkerJob; progress: number; startedAt: number; leaseLost: boolean };
 
-createServer(async (request, response) => {
-  if (request.method === "GET" && request.url === "/health") return send(response, 200, { ok: true, active, queued: queue.length });
-  if (request.method !== "POST" || request.url !== "/jobs") return send(response, 404, { error: "Not found" });
-  if (request.headers.authorization !== `Bearer ${sharedSecret}`) return send(response, 401, { error: "Unauthorized" });
-  try {
-    const body = jobSchema.parse(JSON.parse(await readBody(request)));
-    const workerRef = randomUUID();
-    queue.push({ job: body, workerRef });
-    send(response, 202, { workerRef });
-    void drainQueue();
-  } catch (error) {
-    send(response, 400, { error: error instanceof Error ? error.message : "Invalid job" });
-  }
-}).listen(port, () => {
-  process.stdout.write(`ClipFactory worker listening on ${port}\n`);
-});
+async function main() {
+  const config = loadWorkerConfig();
+  const startedAt = Date.now();
+  const activeJobs = new Map<string, ActiveJob>();
+  const capabilities = {
+    ...(await checkMediaCapabilities()),
+    storage: storageConfigured(),
+    transcription: Boolean(process.env.WHISPER_BASE_URL?.trim()),
+    faceTracker: Boolean(process.env.FACE_TRACKER_URL?.trim()),
+  };
+  const readyToProcess = requiredCapabilitiesReady(capabilities);
+  const removedTempDirectories = await cleanupStaleWorkerDirectories().catch(() => 0);
+  let lastSuccessfulJobAt: number | null = null;
+  let lastFailedJobAt: number | null = null;
+  let polling = false;
+  let shuttingDown = false;
 
-async function drainQueue() {
-  while (active < maxParallel && queue.length) {
-    const item = queue.shift();
-    if (!item) return;
-    active += 1;
-    void processJob(item.job)
-      .then((outputs) => callback(item.job, { ok: true, outputs }))
-      .catch((error) => callback(item.job, { ok: false, errorMessage: error instanceof Error ? error.message.slice(0, 1000) : "Worker stage failed" }))
-      .finally(() => { active -= 1; void drainQueue(); });
-  }
-}
-
-async function callback(job: WorkerJob, result: { ok: boolean; outputs?: unknown; errorMessage?: string }) {
-  const response = await fetch(job.callbackUrl, { method: "POST", headers: { Authorization: `Bearer ${job.callbackSecret}`, "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.jobId, workflowId: job.workflowId, eventName: job.eventName, result }) });
-  if (!response.ok) process.stderr.write(`Callback for ${job.jobId} returned HTTP ${response.status}\n`);
-}
-
-function readBody(request: import("node:http").IncomingMessage) {
-  return new Promise<string>((resolve, reject) => {
-    let body = "";
-    request.setEncoding("utf8");
-    request.on("data", (chunk: string) => { body += chunk; if (body.length > 1_000_000) request.destroy(new Error("Request body is too large")); });
-    request.on("end", () => resolve(body));
-    request.on("error", reject);
+  const server = createServer((request, response) => {
+    if (request.method === "GET" && request.url === "/health") {
+      const health = buildHealthResponse({
+        config,
+        capabilities,
+        activeJobs: activeJobs.size,
+        startedAt,
+        lastSuccessfulJobAt,
+        lastFailedJobAt,
+      });
+      return send(response, health.ok ? 200 : 503, health);
+    }
+    return send(response, 404, { error: "Not found" });
   });
+
+  async function pollForWork() {
+    if (!readyToProcess || polling || shuttingDown || activeJobs.size >= config.maxParallel) return;
+    polling = true;
+    try {
+      while (!shuttingDown && activeJobs.size < config.maxParallel) {
+        const job = await claimJob(config);
+        if (!job) break;
+        const state: ActiveJob = { job, progress: 2, startedAt: Date.now(), leaseLost: false };
+        activeJobs.set(job.jobId, state);
+        void runClaimedJob(state);
+      }
+    } catch (error) {
+      const failure = classifyWorkerError(error);
+      console.error(JSON.stringify({ event: "worker.claim_failed", workerId: config.workerId, errorClass: failure.code, status: "failed" }));
+    } finally {
+      polling = false;
+    }
+  }
+
+  async function runClaimedJob(state: ActiveJob) {
+    const { job } = state;
+    console.info(JSON.stringify({ event: "worker.claimed_job", workerId: config.workerId, jobId: job.jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt }));
+    const heartbeatTimer = setInterval(() => {
+      void sendHeartbeat(config, job, state.progress).catch((error) => {
+        const failure = classifyWorkerError(error);
+        if (failure.code === "LEASE_LOST") state.leaseLost = true;
+        console.warn(JSON.stringify({ event: "worker.heartbeat", workerId: config.workerId, jobId: job.jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, status: "failed", errorClass: failure.code }));
+      });
+    }, config.heartbeatMs);
+
+    try {
+      const outputs = await processJob(job, (progress) => { state.progress = Math.max(state.progress, progress); });
+      if (state.leaseLost) {
+        console.warn(JSON.stringify({ event: "worker.callback_failed", workerId: config.workerId, jobId: job.jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, errorClass: "LEASE_LOST" }));
+        return;
+      }
+      const delivery = await deliverCallback(config, job, { ok: true, outputs });
+      if (!delivery.delivered) {
+        lastFailedJobAt = Date.now();
+        console.error(JSON.stringify({ event: "worker.callback_failed", workerId: config.workerId, jobId: job.jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, status: delivery.status, errorClass: "CALLBACK_DELIVERY_FAILED" }));
+        return;
+      }
+      lastSuccessfulJobAt = Date.now();
+      console.info(JSON.stringify({ event: "worker.completed_job", workerId: config.workerId, jobId: job.jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, elapsedMs: Date.now() - state.startedAt, status: "complete" }));
+    } catch (error) {
+      const failure = classifyWorkerError(error);
+      lastFailedJobAt = Date.now();
+      if (!state.leaseLost) {
+        const delivery = await deliverCallback(config, job, { ok: false, errorMessage: failure.message, errorCode: failure.code, retryable: failure.retryable });
+        if (!delivery.delivered) {
+          console.error(JSON.stringify({ event: "worker.callback_failed", workerId: config.workerId, jobId: job.jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, status: delivery.status, errorClass: "CALLBACK_DELIVERY_FAILED" }));
+        }
+      }
+      console.error(JSON.stringify({ event: "worker.failed_job", workerId: config.workerId, jobId: job.jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, elapsedMs: Date.now() - state.startedAt, errorClass: failure.code, retryable: failure.retryable, status: "failed" }));
+    } finally {
+      clearInterval(heartbeatTimer);
+      activeJobs.delete(job.jobId);
+      void pollForWork();
+    }
+  }
+
+  server.listen(config.port, () => {
+    console.info(JSON.stringify({ event: "worker.started", workerId: config.workerId, capacity: config.maxParallel, version: config.version, readyToProcess, capabilities, removedTempDirectories }));
+    void pollForWork();
+  });
+
+  const pollTimer = setInterval(() => { void pollForWork(); }, config.pollMs);
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    clearInterval(pollTimer);
+    server.close();
+    console.info(JSON.stringify({ event: "worker.stopping", workerId: config.workerId, activeJobs: activeJobs.size }));
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }
 
 function send(response: import("node:http").ServerResponse, status: number, body: unknown) {
@@ -58,8 +126,8 @@ function send(response: import("node:http").ServerResponse, status: number, body
   response.end(JSON.stringify(body));
 }
 
-function requiredEnv(name: string) {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is not configured`);
-  return value;
-}
+main().catch((error) => {
+  const failure = classifyWorkerError(error);
+  console.error(JSON.stringify({ event: "worker.start_failed", errorClass: failure.code, message: failure.message }));
+  process.exitCode = 1;
+});

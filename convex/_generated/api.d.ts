@@ -8,11 +8,13 @@
  * @module
  */
 
+import type * as abuse from "../abuse.js";
 import type * as aiActions from "../aiActions.js";
 import type * as aiData from "../aiData.js";
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as clips from "../clips.js";
+import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as http from "../http.js";
 import type * as lib_aiConfig from "../lib/aiConfig.js";
@@ -21,6 +23,8 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_clipAnalysis from "../lib/clipAnalysis.js";
 import type * as lib_clipDiscoveryPrompt from "../lib/clipDiscoveryPrompt.js";
 import type * as lib_presenters from "../lib/presenters.js";
+import type * as lib_rateLimits from "../lib/rateLimits.js";
+import type * as lib_secrets from "../lib/secrets.js";
 import type * as lib_stages from "../lib/stages.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as processing from "../processing.js";
@@ -37,11 +41,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  abuse: typeof abuse;
   aiActions: typeof aiActions;
   aiData: typeof aiData;
   auth: typeof auth;
   billing: typeof billing;
   clips: typeof clips;
+  crons: typeof crons;
   dashboard: typeof dashboard;
   http: typeof http;
   "lib/aiConfig": typeof lib_aiConfig;
@@ -50,6 +56,8 @@ declare const fullApi: ApiFromModules<{
   "lib/clipAnalysis": typeof lib_clipAnalysis;
   "lib/clipDiscoveryPrompt": typeof lib_clipDiscoveryPrompt;
   "lib/presenters": typeof lib_presenters;
+  "lib/rateLimits": typeof lib_rateLimits;
+  "lib/secrets": typeof lib_secrets;
   "lib/stages": typeof lib_stages;
   "lib/validators": typeof lib_validators;
   processing: typeof processing;

@@ -8,10 +8,13 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "npm run test:unit && npm run test:reliability",
+    "test:unit": "node --import tsx --test test/clip-analysis.test.ts test/site-url.test.ts test/video-engine.test.ts",
+    "test:reliability": "vitest run test/reliability.convex.test.ts test/vitest/worker-reliability.test.ts",
     "convex:dev": "convex dev",
     "convex:codegen": "convex codegen",
     "worker:dev": "tsx worker/src/server.ts",
+    "worker:check": "tsx worker/src/capability-check.ts",
     "worker:typecheck": "tsc -p worker/tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -37,14 +40,17 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "convex-test": "^0.0.56",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

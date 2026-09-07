@@ -25,11 +25,6 @@ export async function createSourceUpload(objectKey: string, mimeType: string, fi
   return getSignedUrl(r2Client(), command, { expiresIn: 15 * 60 });
 }
 
-export function publicObjectUrl(objectKey: string) {
-  const base = process.env.R2_PUBLIC_URL?.trim();
-  return base ? `${base.replace(/\/$/, "")}/${objectKey.split("/").map(encodeURIComponent).join("/")}` : undefined;
-}
-
 function requiredEnv(name: string) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not configured`);

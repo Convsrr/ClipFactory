@@ -1,6 +1,8 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
+import { rateLimitTables } from "convex-helpers/server/rateLimit";
+import { renderJobMetadataValidator } from "./lib/stages";
 
 export const projectStatus = v.union(v.literal("draft"), v.literal("processing"), v.literal("complete"), v.literal("failed"));
 export const jobStatus = v.union(v.literal("queued"), v.literal("running"), v.literal("complete"), v.literal("failed"));
@@ -71,6 +73,7 @@ const analysedCandidate = v.object({
 
 export default defineSchema({
   ...authTables,
+  ...rateLimitTables,
   users: defineTable({
     name: v.string(),
     image: v.optional(v.string()),
@@ -135,6 +138,22 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_uploadStatus", ["uploadStatus"]),
 
+  uploadIntents: defineTable({
+    userId: v.id("users"),
+    objectKey: v.string(),
+    sourceFilename: v.string(),
+    mimeType: v.string(),
+    fileSizeBytes: v.number(),
+    status: v.union(v.literal("pending"), v.literal("attached"), v.literal("expired")),
+    projectId: v.optional(v.id("projects")),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_objectKey", ["objectKey"])
+    .index("by_userId_and_status", ["userId", "status"])
+    .index("by_status_and_expiresAt", ["status", "expiresAt"]),
+
   transcripts: defineTable({
     projectId: v.id("projects"),
     videoId: v.id("videos"),
@@ -144,12 +163,14 @@ export default defineSchema({
     words: v.optional(v.array(transcriptWord)),
     engine: v.string(),
     status: jobStatus,
+    renderJobId: v.optional(v.id("renderJobs")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_projectId", ["projectId"])
     .index("by_videoId", ["videoId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_renderJobId", ["renderJobId"]),
 
   analysisRuns: defineTable({
     projectId: v.id("projects"),
@@ -253,6 +274,7 @@ export default defineSchema({
 
   renderJobs: defineTable({
     projectId: v.id("projects"),
+    videoId: v.optional(v.id("videos")),
     clipId: v.optional(v.id("clips")),
     type: processingStage,
     status: jobStatus,
@@ -260,9 +282,22 @@ export default defineSchema({
     errorMessage: v.optional(v.string()),
     workerRef: v.optional(v.string()),
     workflowId: v.optional(v.string()),
+    eventName: v.optional(v.string()),
     attempt: v.number(),
+    workerId: v.optional(v.string()),
+    claimedAt: v.optional(v.number()),
+    processingStartedAt: v.optional(v.number()),
+    leaseExpiresAt: v.optional(v.number()),
+    lastHeartbeatAt: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    completedAttempt: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    retryable: v.optional(v.boolean()),
+    lastCallbackAt: v.optional(v.number()),
+    eventSentAt: v.optional(v.number()),
     appliedAt: v.optional(v.number()),
-    metadata: v.optional(v.any()),
+    metadata: v.optional(renderJobMetadataValidator),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -270,12 +305,18 @@ export default defineSchema({
     .index("by_projectId_and_status", ["projectId", "status"])
     .index("by_clipId", ["clipId"])
     .index("by_status", ["status"])
+    .index("by_status_and_nextAttemptAt", ["status", "nextAttemptAt"])
+    .index("by_status_and_leaseExpiresAt", ["status", "leaseExpiresAt"])
+    .index("by_workflowId_and_type", ["workflowId", "type"])
     .index("by_createdAt", ["createdAt"]),
 
   usageLedger: defineTable({
     userId: v.id("users"),
     projectId: v.optional(v.id("projects")),
     clipId: v.optional(v.id("clips")),
+    renderJobId: v.optional(v.id("renderJobs")),
+    idempotencyKey: v.optional(v.string()),
+    reason: v.optional(v.string()),
     kind: v.union(v.literal("allocation"), v.literal("processing_debit"), v.literal("refund"), v.literal("adjustment")),
     creditsDelta: v.number(),
     costEstimateUsd: v.optional(v.number()),
@@ -285,5 +326,13 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_and_createdAt", ["userId", "createdAt"])
     .index("by_projectId", ["projectId"])
+    .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_clipId", ["clipId"]),
+
+  billingEvents: defineTable({
+    eventId: v.string(),
+    eventType: v.string(),
+    stripeCustomerId: v.string(),
+    processedAt: v.number(),
+  }).index("by_eventId", ["eventId"]),
 });

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { z } from "zod";
+import { WorkerError } from "./errors.js";
 
 const responseSchema = z.object({
   language: z.string().optional(),
@@ -18,8 +19,13 @@ export async function transcribe(audioPath: string) {
     method: "POST",
     headers: process.env.WHISPER_API_KEY ? { Authorization: `Bearer ${process.env.WHISPER_API_KEY}` } : undefined,
     body: form,
+    signal: AbortSignal.timeout(transcriptionTimeoutMs()),
   });
-  if (!response.ok) throw new Error(`Transcription service returned HTTP ${response.status}`);
+  if (!response.ok) {
+    if (response.status === 429) throw new WorkerError("TRANSCRIPTION_RATE_LIMITED", "Transcription service returned HTTP 429", true);
+    if (response.status === 408 || response.status >= 500) throw new WorkerError("TRANSCRIPTION_UNAVAILABLE", `Transcription service returned HTTP ${response.status}`, true);
+    throw new WorkerError("CONFIGURATION_ERROR", `Transcription service rejected the request with HTTP ${response.status}`, false);
+  }
   const parsed = responseSchema.parse(await response.json());
   return {
     language: parsed.language,
@@ -34,4 +40,9 @@ function requiredEnv(name: string) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not configured`);
   return value;
+}
+
+function transcriptionTimeoutMs() {
+  const parsed = Number(process.env.WHISPER_TIMEOUT_MS);
+  return Number.isFinite(parsed) ? Math.min(30 * 60 * 1000, Math.max(60_000, Math.round(parsed))) : 15 * 60 * 1000;
 }

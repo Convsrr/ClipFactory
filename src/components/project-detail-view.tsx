@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowLeft, Captions, Check, Circle, Download, FileVideo2, LoaderCircle, RotateCcw, TvMinimalPlay } from "lucide-react";
+import { ArrowLeft, Captions, Check, Circle, Download, FileVideo2, LoaderCircle, TvMinimalPlay } from "lucide-react";
 import { ClipCard } from "@/components/clip-card";
+import { RetryProjectButton } from "@/components/retry-project-button";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ export function ProjectDetailView({ project, previewMode }: { project: ProjectDe
           <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"><SourceIcon aria-hidden="true" className="size-4" /><span className="capitalize">{project.sourceType}</span><span aria-hidden="true">·</span><span>{formatDuration(project.durationSec)}</span><span aria-hidden="true">·</span><span>{project.clips.length} candidates</span></p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="min-h-11" disabled={previewMode || project.status === "processing"}><RotateCcw aria-hidden="true" /> Retry failed stage</Button>
+          <RetryProjectButton projectId={project.id} disabled={previewMode || project.status !== "failed"} />
           <Button className="min-h-11" disabled={!project.clips.some((clip) => clip.finalUrl)}><Download aria-hidden="true" /> Download all</Button>
         </div>
       </div>
