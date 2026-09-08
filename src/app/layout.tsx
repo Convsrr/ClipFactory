@@ -29,8 +29,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f4ef" },
-    { media: "(prefers-color-scheme: dark)", color: "#17151d" },
+    { media: "(prefers-color-scheme: light)", color: "#f8f6f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0e12" },
   ],
 };
 
@@ -46,6 +46,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body>
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
         <BackendProvider>
           <AppProviders>{children}</AppProviders>
         </BackendProvider>

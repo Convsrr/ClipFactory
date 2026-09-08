@@ -26,15 +26,15 @@ export function UploadDialog({ previewMode, compact = false }: { previewMode: bo
       >
         <UploadCloud aria-hidden="true" />{compact ? null : "New project"}
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-popover p-5 sm:max-w-xl sm:p-6">
         <DialogHeader>
-          <DialogTitle className="text-xl tracking-tight">Create a clip project</DialogTitle>
-          <DialogDescription>Add a file or a YouTube link you have permission to process.</DialogDescription>
+          <DialogTitle className="text-xl tracking-[-0.03em]">Create a clip project</DialogTitle>
+          <DialogDescription>Start with a source video. We will bring the candidate moments back to this workspace.</DialogDescription>
         </DialogHeader>
         {previewMode ? (
-          <Alert className="mt-2">
+          <Alert className="mt-2 border-primary/30 bg-primary/10">
             <AlertTitle>Preview workspace</AlertTitle>
-            <AlertDescription>Configure Convex, R2, and the worker service to enable uploads. The interface below shows the production input flow.</AlertDescription>
+            <AlertDescription>Uploads are disabled here. Configure Convex, R2, and the worker service to process your own source.</AlertDescription>
           </Alert>
         ) : null}
         <UploadTabs disabled={previewMode} onComplete={() => setOpen(false)} />
@@ -126,26 +126,27 @@ function UploadTabs({ disabled, onComplete }: { disabled: boolean; onComplete: (
 
   return (
     <Tabs defaultValue="upload" className="mt-4">
-      <TabsList className="grid h-11 w-full grid-cols-2">
+      <TabsList className="grid h-12 w-full grid-cols-2 bg-muted/80">
         <TabsTrigger value="upload" className="min-h-9"><FileVideo2 aria-hidden="true" /> Upload</TabsTrigger>
         <TabsTrigger value="youtube" className="min-h-9"><Link2 aria-hidden="true" /> YouTube link</TabsTrigger>
       </TabsList>
       <TabsContent value="upload" className="mt-5 space-y-4">
         <button
           type="button"
+          aria-label={file ? `Selected video: ${file.name}` : "Choose or drop a video file"}
           disabled={disabled || pending}
           onClick={() => inputRef.current?.click()}
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
-          className={cn("flex min-h-56 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-input bg-muted/35 p-6 text-center transition-colors hover:border-primary hover:bg-accent/40 disabled:cursor-not-allowed disabled:opacity-55", dragging && "border-primary bg-accent/55")}
+          className={cn("flex min-h-56 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-input bg-surface/80 p-6 text-center transition-colors duration-200 hover:border-primary hover:bg-accent/40 disabled:cursor-not-allowed disabled:opacity-55", dragging && "border-primary bg-accent/55")}
         >
           <span className="grid size-12 place-items-center rounded-2xl bg-card shadow-sm"><UploadCloud aria-hidden="true" className="size-5 text-primary" /></span>
-          <span className="mt-4 text-sm font-semibold">{file ? file.name : "Drop a video here or choose a file"}</span>
+          <span className="mt-4 max-w-full truncate px-3 text-sm font-semibold">{file ? file.name : "Drop a video here or choose a file"}</span>
           <span className="mt-1 text-xs leading-5 text-muted-foreground">MP4, MOV, or WebM · up to 5 GB</span>
         </button>
         <Input ref={inputRef} className="sr-only" type="file" accept="video/mp4,video/quicktime,video/webm" tabIndex={-1} onChange={(event) => acceptFile(event.target.files?.[0])} />
-        {pending ? <div className="space-y-2"><div className="flex justify-between text-xs text-muted-foreground"><span>Uploading source</span><span>{progress}%</span></div><Progress value={progress} /></div> : null}
+        {pending ? <div className="space-y-2" role="status" aria-live="polite"><div className="flex justify-between text-xs text-muted-foreground"><span>Uploading source</span><span className="font-mono tabular-nums">{progress}%</span></div><Progress value={progress} aria-label={`${progress}% uploaded`} /></div> : null}
         <Button type="button" className="min-h-12 w-full rounded-xl" disabled={!file || disabled || pending} onClick={uploadFile}>
           {pending ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : null} Upload and process
         </Button>

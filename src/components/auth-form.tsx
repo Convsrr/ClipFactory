@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,10 +48,9 @@ export function LiveAuthForm({ mode }: { mode: AuthMode }) {
 export function PreviewAuthForm({ mode }: { mode: AuthMode }) {
   return (
     <div className="space-y-5">
-      <Alert>
-        <AlertDescription>
-          Preview mode is active because Convex Auth has no local configuration. You can inspect the product workspace without creating an account.
-        </AlertDescription>
+      <Alert className="border-primary/30 bg-primary/10">
+        <AlertTitle>Preview mode</AlertTitle>
+        <AlertDescription>Convex Auth is not configured locally. Explore the sample workspace without creating an account.</AlertDescription>
       </Alert>
       <AuthFields mode={mode} pending={false} error={null} onSubmit={(event) => event.preventDefault()} disabled />
       <Button asChild className="min-h-12 w-full rounded-xl text-base">
@@ -75,7 +74,7 @@ function AuthFields({
   disabled?: boolean;
 }) {
   return (
-    <form className="space-y-5" onSubmit={onSubmit}>
+    <form className="space-y-5" onSubmit={onSubmit} aria-busy={pending}>
       {mode === "sign-up" ? (
         <div className="space-y-2">
           <Label htmlFor="name">Name</Label>
@@ -87,12 +86,9 @@ function AuthFields({
         <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" placeholder="you@company.com" required disabled={disabled} className="h-12" />
       </div>
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="password">Password</Label>
-          {mode === "sign-in" ? <span className="text-xs text-muted-foreground">Reset flow is a post-MVP task</span> : null}
-        </div>
-        <Input id="password" name="password" type="password" autoComplete={mode === "sign-up" ? "new-password" : "current-password"} minLength={8} required disabled={disabled} className="h-12" />
-        {mode === "sign-up" ? <p className="text-xs leading-5 text-muted-foreground">Use at least eight characters.</p> : null}
+        <Label htmlFor="password">Password</Label>
+        <Input id="password" name="password" type="password" autoComplete={mode === "sign-up" ? "new-password" : "current-password"} minLength={8} required disabled={disabled} className="h-12" aria-describedby={mode === "sign-up" ? "password-hint" : undefined} />
+        {mode === "sign-up" ? <p id="password-hint" className="text-xs leading-5 text-muted-foreground">Use at least eight characters.</p> : null}
       </div>
       {error ? (
         <Alert variant="destructive" role="alert">
@@ -100,7 +96,7 @@ function AuthFields({
         </Alert>
       ) : null}
       {!disabled ? (
-        <Button type="submit" className="min-h-12 w-full rounded-xl text-base" disabled={pending}>
+        <Button type="submit" className="min-h-12 w-full rounded-xl text-base" disabled={pending} aria-busy={pending}>
           {pending ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : null}
           {mode === "sign-up" ? "Create account" : "Sign in"}
         </Button>

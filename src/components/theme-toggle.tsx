@@ -15,6 +15,7 @@ export function ThemeToggle() {
       className="size-11 rounded-xl"
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       aria-label="Toggle colour theme"
+      title="Toggle colour theme"
     >
       <Sun aria-hidden="true" className="hidden dark:block" />
       <Moon aria-hidden="true" className="block dark:hidden" />
