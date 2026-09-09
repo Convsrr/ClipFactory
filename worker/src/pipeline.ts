@@ -60,7 +60,10 @@ async function ingest(job: WorkerJob, workDir: string, reportProgress: (progress
   if (sourceStat.size <= 0 || sourceStat.size > job.maxSourceFileBytes) throw new WorkerError("INVALID_MEDIA", "Source file size is outside the allowed range", false);
   if (job.sourceType === "upload" && job.sourceFileSizeBytes && sourceStat.size !== job.sourceFileSizeBytes) throw new WorkerError("INVALID_MEDIA", "Uploaded source size does not match the signed upload", false);
   const safety = await scanSourceMedia(source, job.originalObjectKey);
-  if (!safety.clean) throw new WorkerError("INVALID_MEDIA", safety.reason ?? "Source media failed the configured file-safety scan", false);
+  if (!safety.clean) {
+    const reason = "reason" in safety ? safety.reason : undefined;
+    throw new WorkerError("INVALID_MEDIA", reason ?? "Source media failed the configured file-safety scan", false);
+  }
   const metadata = await inspectVideo(source, job.maxSourceDurationSec);
   reportProgress(45);
   const proxy = join(workDir, "proxy.mp4");
