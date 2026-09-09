@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { ArrowUpRight, FileVideo2, TvMinimalPlay } from "lucide-react";
+import { ArrowUpRight, FileVideo2, HardDrive, TvMinimalPlay } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Progress } from "@/components/ui/progress";
 import { formatDuration, formatRelativeDate, formatStage } from "@/lib/format";
 import type { ProjectSummary } from "@/lib/product-types";
 
 export function ProjectRow({ project }: { project: ProjectSummary }) {
-  const SourceIcon = project.sourceType === "youtube" ? TvMinimalPlay : FileVideo2;
+  const SourceIcon = project.sourceType === "youtube" ? TvMinimalPlay : project.sourceType === "google_drive" ? HardDrive : FileVideo2;
   const projectMeta = `${formatDuration(project.durationSec)} · ${project.clipCount} ${project.clipCount === 1 ? "clip" : "clips"} · ${formatRelativeDate(project.createdAt)}`;
 
   return (

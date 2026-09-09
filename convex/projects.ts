@@ -30,7 +30,7 @@ export const detail = query({
     v.object({
       id: v.string(),
       title: v.string(),
-      sourceType: v.union(v.literal("upload"), v.literal("youtube")),
+      sourceType: v.union(v.literal("upload"), v.literal("youtube"), v.literal("google_drive")),
       status: v.union(v.literal("draft"), v.literal("processing"), v.literal("complete"), v.literal("failed")),
       createdAt: v.number(),
       updatedAt: v.number(),
@@ -139,6 +139,24 @@ export const createFromYoutube = mutation({
     const now = Date.now();
     const projectId = await ctx.db.insert("projects", { userId, title: cleanTitle(args.title), sourceType: "youtube", status: "processing", activeStage: "ingest", progress: 1, createdAt: now, updatedAt: now });
     const videoId = await ctx.db.insert("videos", { projectId, userId, originalUrl: url.toString(), uploadStatus: "uploaded", createdAt: now, updatedAt: now });
+    await beginWorkflow(ctx, projectId, videoId);
+    return { projectId: projectId as string, videoId: videoId as string };
+  },
+});
+
+export const createFromGoogleDrive = mutation({
+  args: { title: v.string(), googleDriveUrl: v.string() },
+  returns: v.object({ projectId: v.string(), videoId: v.string() }),
+  handler: async (ctx, args): Promise<{ projectId: string; videoId: string }> => {
+    const userId = await requireUserId(ctx);
+    await rateLimit(ctx, { name: "projectCreation", key: userId, throws: true });
+    await enforceProjectCapacity(ctx, userId);
+    const user = await ctx.db.get(userId);
+    if (!user || user.creditsRemaining <= 0) throw new Error("No processing credits remain");
+    const url = validatedGoogleDriveUrl(args.googleDriveUrl);
+    const now = Date.now();
+    const projectId = await ctx.db.insert("projects", { userId, title: cleanTitle(args.title), sourceType: "google_drive", status: "processing", activeStage: "ingest", progress: 1, createdAt: now, updatedAt: now });
+    const videoId = await ctx.db.insert("videos", { projectId, userId, originalUrl: url, uploadStatus: "uploaded", createdAt: now, updatedAt: now });
     await beginWorkflow(ctx, projectId, videoId);
     return { projectId: projectId as string, videoId: videoId as string };
   },
@@ -277,4 +295,17 @@ function validatedYoutubeUrl(value: string) {
   url.password = "";
   url.hash = "";
   return url;
+}
+
+function validatedGoogleDriveUrl(value: string) {
+  const url = new URL(value);
+  if (url.protocol !== "https:") throw new Error("Enter a valid Google Drive file URL");
+  const hostname = url.hostname.toLowerCase();
+  if (hostname !== "drive.google.com" && hostname !== "www.drive.google.com" && hostname !== "drive.usercontent.google.com") {
+    throw new Error("Enter a valid Google Drive file URL");
+  }
+  const pathMatch = url.pathname.match(/\/file\/d\/([^/]+)/i);
+  const fileId = pathMatch?.[1] ?? url.searchParams.get("id");
+  if (!fileId || !/^[a-zA-Z0-9_-]{3,200}$/.test(fileId)) throw new Error("Enter a valid Google Drive file URL");
+  return `https://drive.google.com/file/d/${fileId}/view`;
 }

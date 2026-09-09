@@ -25,7 +25,7 @@ export const payload = internalQuery({
   args: { jobId: v.id("renderJobs"), workerId: v.string(), attempt: v.number() },
   returns: v.object({
     jobId: v.string(), projectId: v.string(), videoId: v.string(), stage: stageNameValidator, workflowId: v.string(), attempt: v.number(),
-    sourceType: v.union(v.literal("upload"), v.literal("youtube")),
+    sourceType: v.union(v.literal("upload"), v.literal("youtube"), v.literal("google_drive")),
     originalUrl: v.union(v.string(), v.null()), originalObjectKey: v.union(v.string(), v.null()),
     proxyObjectKey: v.union(v.string(), v.null()), audioObjectKey: v.union(v.string(), v.null()), outputPrefix: v.string(),
     sourceWidth: v.union(v.number(), v.null()), sourceHeight: v.union(v.number(), v.null()), sourceFps: v.union(v.number(), v.null()),
@@ -81,7 +81,7 @@ export const payload = internalQuery({
       sourceHeight: video.height ?? null,
       sourceFps: video.fps ?? null,
       sourceFileSizeBytes: video.fileSizeBytes ?? null,
-      maxSourceFileBytes: PRODUCT_LIMITS.maxSourceFileBytes,
+      maxSourceFileBytes: project.sourceType === "google_drive" ? PRODUCT_LIMITS.maxRemoteSourceFileBytes : PRODUCT_LIMITS.maxSourceFileBytes,
       maxSourceDurationSec: PRODUCT_LIMITS.maxSourceDurationSec,
       sceneTimestamps,
       clips: clips.map((clip) => ({

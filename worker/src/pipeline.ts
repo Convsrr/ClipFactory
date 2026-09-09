@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeCaptionFile } from "./captions.js";
 import { createProxy, createThumbnail, detectScenes, downloadYoutube, extractAudio, inspectVideo, renderVerticalClip } from "./ffmpeg.js";
+import { downloadGoogleDrive } from "./google-drive.js";
 import { trackWithOptionalProvider } from "./face-tracking.js";
 import type { RenderStat } from "./media-types.js";
 import { scanSourceMedia } from "./media-security.js";
@@ -45,6 +46,11 @@ async function ingest(job: WorkerJob, workDir: string, reportProgress: (progress
   if (job.sourceType === "youtube") {
     if (!job.originalUrl) throw new Error("YouTube job has no source URL");
     await downloadYoutube(job.originalUrl, source);
+  } else if (job.sourceType === "google_drive") {
+    if (!job.originalUrl) throw new Error("Google Drive job has no source URL");
+    await downloadGoogleDrive(job.originalUrl, source, job.maxSourceFileBytes, (downloadedBytes, totalBytes) => {
+      if (totalBytes) reportProgress(Math.min(24, 5 + Math.round((downloadedBytes / totalBytes) * 19)));
+    });
   } else {
     if (!job.originalObjectKey) throw new Error("Upload job has no source object key");
     await downloadObject(job.originalObjectKey, source);

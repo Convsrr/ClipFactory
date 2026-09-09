@@ -11,7 +11,12 @@ const uploadSchema = z.object({
   fileSizeBytes: z.number().int().positive().max(PRODUCT_LIMITS.maxSourceFileBytes),
 });
 const youtubeSchema = z.object({ sourceType: z.literal("youtube"), title: z.string().min(1).max(140), youtubeUrl: z.string().url().max(500) });
-const requestSchema = z.discriminatedUnion("sourceType", [uploadSchema, youtubeSchema]);
+const googleDriveSchema = z.object({
+  sourceType: z.literal("google_drive"),
+  title: z.string().min(1).max(140),
+  googleDriveUrl: z.string().url().max(500).refine(isGoogleDriveUrl, "Enter a valid Google Drive file URL."),
+});
+const requestSchema = z.discriminatedUnion("sourceType", [uploadSchema, youtubeSchema, googleDriveSchema]);
 
 export async function POST(request: Request) {
   if (!process.env.NEXT_PUBLIC_CONVEX_URL) return Response.json({ error: "Projects are disabled in preview mode." }, { status: 503 });
@@ -28,9 +33,25 @@ export async function POST(request: Request) {
   try {
     const result = parsed.data.sourceType === "upload"
       ? await fetchMutation(api.projects.createFromUpload, parsed.data, { token })
-      : await fetchMutation(api.projects.createFromYoutube, { title: parsed.data.title, youtubeUrl: parsed.data.youtubeUrl }, { token });
+      : parsed.data.sourceType === "youtube"
+        ? await fetchMutation(api.projects.createFromYoutube, { title: parsed.data.title, youtubeUrl: parsed.data.youtubeUrl }, { token })
+        : await fetchMutation(api.projects.createFromGoogleDrive, { title: parsed.data.title, googleDriveUrl: parsed.data.googleDriveUrl }, { token });
     return Response.json(result, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not create the project." }, { status: 400 });
+  }
+}
+
+function isGoogleDriveUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const hostname = url.hostname.toLowerCase();
+    if (hostname !== "drive.google.com" && hostname !== "www.drive.google.com" && hostname !== "drive.usercontent.google.com") return false;
+    const pathMatch = url.pathname.match(/\/file\/d\/([^/]+)/i);
+    const fileId = pathMatch?.[1] ?? url.searchParams.get("id");
+    return Boolean(fileId && /^[a-zA-Z0-9_-]{3,200}$/.test(fileId));
+  } catch {
+    return false;
   }
 }

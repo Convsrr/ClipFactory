@@ -36,7 +36,7 @@ export const jobSchema = z.object({
   stage: stageSchema,
   workflowId: z.string().min(1),
   attempt: z.number().int().positive(),
-  sourceType: z.enum(["upload", "youtube"]),
+  sourceType: z.enum(["upload", "youtube", "google_drive"]),
   originalUrl: z.string().url().nullable(),
   originalObjectKey: z.string().nullable(),
   proxyObjectKey: z.string().nullable(),
@@ -58,8 +58,13 @@ export const jobSchema = z.object({
       context.addIssue({ code: "custom", message: "Object key is invalid" });
     }
   }
-  if (value.sourceType === "upload" && !value.originalObjectKey && value.stage === "ingest") {
-    context.addIssue({ code: "custom", message: "Upload ingest requires an object key" });
+  if (value.stage === "ingest") {
+    if (value.sourceType === "upload" && !value.originalObjectKey) {
+      context.addIssue({ code: "custom", message: "Upload ingest requires an object key" });
+    }
+    if (value.sourceType !== "upload" && !value.originalUrl) {
+      context.addIssue({ code: "custom", message: "Remote ingest requires a source URL" });
+    }
   }
 });
 

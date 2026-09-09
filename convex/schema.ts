@@ -100,7 +100,7 @@ export default defineSchema({
   projects: defineTable({
     userId: v.id("users"),
     title: v.string(),
-    sourceType: v.union(v.literal("upload"), v.literal("youtube")),
+    sourceType: v.union(v.literal("upload"), v.literal("youtube"), v.literal("google_drive")),
     status: projectStatus,
     activeStage: v.optional(processingStage),
     progress: v.number(),

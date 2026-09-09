@@ -25,6 +25,7 @@ export const RELIABILITY_DEFAULTS = {
 
 export const PRODUCT_LIMITS = {
   maxSourceFileBytes: 5 * 1024 * 1024 * 1024,
+  maxRemoteSourceFileBytes: 25 * 1024 * 1024 * 1024,
   maxSourceDurationSec: 3 * 60 * 60,
   maxConcurrentProjectsPerUser: 3,
   uploadIntentTtlMs: 24 * 60 * 60 * 1000,

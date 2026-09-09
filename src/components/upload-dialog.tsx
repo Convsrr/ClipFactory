@@ -2,7 +2,7 @@
 
 import { DragEvent, FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileVideo2, Link2, LoaderCircle, UploadCloud } from "lucide-react";
+import { FileVideo2, HardDrive, Link2, LoaderCircle, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -34,7 +34,7 @@ export function UploadDialog({ previewMode, compact = false }: { previewMode: bo
         {previewMode ? (
           <Alert className="mt-2 border-primary/30 bg-primary/10">
             <AlertTitle>Preview workspace</AlertTitle>
-            <AlertDescription>Uploads are disabled here. Configure Convex, R2, and the worker service to process your own source.</AlertDescription>
+            <AlertDescription>Source imports are disabled here. Configure Convex, R2, and the worker service to process your own source.</AlertDescription>
           </Alert>
         ) : null}
         <UploadTabs disabled={previewMode} onComplete={() => setOpen(false)} />
@@ -124,11 +124,34 @@ function UploadTabs({ disabled, onComplete }: { disabled: boolean; onComplete: (
     }
   }
 
+  async function submitGoogleDrive(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    const formData = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceType: "google_drive", title: formData.get("drive-title"), googleDriveUrl: formData.get("googleDriveUrl") }),
+      });
+      const project = await response.json();
+      if (!response.ok) throw new Error(project.error ?? "Could not create the project.");
+      toast.success("Google Drive source added. Processing has started.");
+      onComplete();
+      router.push(`/app/projects/${project.projectId}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not add that Drive link.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <Tabs defaultValue="upload" className="mt-4">
-      <TabsList className="grid h-12 w-full grid-cols-2 bg-muted/80">
+      <TabsList className="grid h-12 w-full grid-cols-3 bg-muted/80">
         <TabsTrigger value="upload" className="min-h-9"><FileVideo2 aria-hidden="true" /> Upload</TabsTrigger>
         <TabsTrigger value="youtube" className="min-h-9"><Link2 aria-hidden="true" /> YouTube link</TabsTrigger>
+        <TabsTrigger value="google-drive" className="min-h-9"><HardDrive aria-hidden="true" /> Google Drive</TabsTrigger>
       </TabsList>
       <TabsContent value="upload" className="mt-5 space-y-4">
         <button
@@ -156,6 +179,14 @@ function UploadTabs({ disabled, onComplete }: { disabled: boolean; onComplete: (
           <div className="space-y-2"><Label htmlFor="project-title">Project title</Label><Input id="project-title" name="title" required disabled={disabled || pending} className="h-12" placeholder="Founder podcast, episode 12" /></div>
           <div className="space-y-2"><Label htmlFor="youtube-url">YouTube URL</Label><Input id="youtube-url" name="youtubeUrl" type="url" required disabled={disabled || pending} className="h-12" placeholder="https://www.youtube.com/watch?v=…" /></div>
           <p className="text-xs leading-5 text-muted-foreground">You must own the video or have permission to download and process it.</p>
+          <Button type="submit" className="min-h-12 w-full rounded-xl" disabled={disabled || pending}>{pending ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : null} Add and process</Button>
+        </form>
+      </TabsContent>
+      <TabsContent value="google-drive" className="mt-5">
+        <form className="space-y-4" onSubmit={submitGoogleDrive}>
+          <div className="space-y-2"><Label htmlFor="drive-title">Project title</Label><Input id="drive-title" name="drive-title" required disabled={disabled || pending} className="h-12" placeholder="Conference talk, April 2026" /></div>
+          <div className="space-y-2"><Label htmlFor="google-drive-url">Google Drive file link</Label><Input id="google-drive-url" name="googleDriveUrl" type="url" required disabled={disabled || pending} className="h-12" placeholder="https://drive.google.com/file/d/…/view" /></div>
+          <p className="text-xs leading-5 text-muted-foreground">Share the file as Anyone with the link · up to 25 GB. The worker downloads it directly, so it does not pass through your browser.</p>
           <Button type="submit" className="min-h-12 w-full rounded-xl" disabled={disabled || pending}>{pending ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : null} Add and process</Button>
         </form>
       </TabsContent>

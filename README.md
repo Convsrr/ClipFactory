@@ -205,7 +205,7 @@ npm run convex:dev       # Live Convex development sync
 
 ### Railway worker deployment
 
-Deploy the worker as a separate Railway service from this repository and set its Dockerfile path to `Dockerfile.worker`. The image installs FFmpeg, the `subtitles`/libass filter, and `yt-dlp`, compiles the worker, and starts it with `npm run worker:start`. Add the worker-only variables from `.env.example` to that service, including `CONVEX_SITE_URL`, both worker secrets, the R2 account ID/access key/secret/bucket/public delivery URL, and `ELEVENLABS_API_KEY`. Leave `WORKER_PORT` unset so Railway's injected `PORT` is used. The service health check path is `GET /health`.
+Deploy the worker as a separate Railway service from this repository. Set the service variable `RAILWAY_DOCKERFILE_PATH=Dockerfile.worker` (or choose `Dockerfile.worker` in the service's Dockerfile path setting). The image installs FFmpeg, the `subtitles`/libass filter, and `yt-dlp`, compiles the worker, and starts it with `npm run worker:start`. Add the worker-only variables from `.env.example` to that service, including `CONVEX_SITE_URL`, both worker secrets, the R2 account ID/access key/secret/bucket/public delivery URL, and `ELEVENLABS_API_KEY`. Leave `WORKER_PORT` unset so Railway's injected `PORT` is used. The service health check path is `GET /health`.
 
 ## Remaining production boundaries
 

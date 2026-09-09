@@ -35,7 +35,7 @@ export type ClipSummary = {
 export type ProjectSummary = {
   id: string;
   title: string;
-  sourceType: "upload" | "youtube";
+  sourceType: "upload" | "youtube" | "google_drive";
   status: ProjectStatus;
   createdAt: number;
   updatedAt: number;

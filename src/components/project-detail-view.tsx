@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Captions, Check, Circle, Download, FileVideo2, LoaderCircle, TvMinimalPlay } from "lucide-react";
+import { ArrowLeft, Captions, Check, Circle, Download, FileVideo2, HardDrive, LoaderCircle, TvMinimalPlay } from "lucide-react";
 import { ClipCard } from "@/components/clip-card";
 import { RetryProjectButton } from "@/components/retry-project-button";
 import { StatusBadge } from "@/components/status-badge";
@@ -11,7 +11,8 @@ import { formatDuration, formatStage } from "@/lib/format";
 import type { ProjectDetail } from "@/lib/product-types";
 
 export function ProjectDetailView({ project, previewMode }: { project: ProjectDetail; previewMode: boolean }) {
-  const SourceIcon = project.sourceType === "youtube" ? TvMinimalPlay : FileVideo2;
+  const SourceIcon = project.sourceType === "youtube" ? TvMinimalPlay : project.sourceType === "google_drive" ? HardDrive : FileVideo2;
+  const sourceLabel = project.sourceType === "google_drive" ? "Google Drive" : project.sourceType === "youtube" ? "YouTube" : "Upload";
   const completedStages = project.timeline.filter((item) => item.status === "complete").length;
   const hasDownloads = project.clips.some((clip) => clip.finalUrl);
   const emptyMessage = project.status === "failed"
@@ -28,7 +29,7 @@ export function ProjectDetailView({ project, previewMode }: { project: ProjectDe
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2"><StatusBadge status={project.status} />{previewMode ? <Badge variant="outline">Sample project</Badge> : null}</div>
           <h1 className="mt-4 max-w-4xl text-balance text-3xl font-semibold tracking-[-0.055em] sm:text-4xl">{project.title}</h1>
-          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"><SourceIcon aria-hidden="true" className="size-4" /><span className="capitalize">{project.sourceType}</span><span aria-hidden="true">·</span><span>{formatDuration(project.durationSec)}</span><span aria-hidden="true">·</span><span>{project.clips.length} candidates</span></p>
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"><SourceIcon aria-hidden="true" className="size-4" /><span>{sourceLabel}</span><span aria-hidden="true">·</span><span>{formatDuration(project.durationSec)}</span><span aria-hidden="true">·</span><span>{project.clips.length} candidates</span></p>
         </div>
         <div className="flex flex-wrap gap-2">
           <RetryProjectButton projectId={project.id} disabled={previewMode || project.status !== "failed"} />

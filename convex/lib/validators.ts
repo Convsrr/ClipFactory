@@ -23,7 +23,7 @@ export const clipSummaryValidator = v.object({
 export const projectSummaryValidator = v.object({
   id: v.string(),
   title: v.string(),
-  sourceType: v.union(v.literal("upload"), v.literal("youtube")),
+  sourceType: v.union(v.literal("upload"), v.literal("youtube"), v.literal("google_drive")),
   status: projectStatus,
   createdAt: v.number(),
   updatedAt: v.number(),
