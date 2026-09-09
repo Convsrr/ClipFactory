@@ -5,12 +5,11 @@ import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
 import { fetchQuery } from "convex/nextjs";
 import { redirect } from "next/navigation";
 import { api } from "../../convex/_generated/api";
+import { isBackendConfigured } from "@/lib/app-mode";
 import { getPreviewClip, getPreviewProject, previewDashboard, previewProjects } from "@/lib/demo-data";
 import type { ClipSummary, DashboardData, ProjectDetail, ProjectSummary } from "@/lib/product-types";
 
-export function isBackendConfigured() {
-  return Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
-}
+export { isBackendConfigured } from "@/lib/app-mode";
 
 async function authToken() {
   const token = await convexAuthNextjsToken();

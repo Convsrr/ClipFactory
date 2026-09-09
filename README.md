@@ -69,6 +69,8 @@ cp .env.example .env.local
 
 Without live service values, `npm run dev` still starts the read-only product preview.
 
+If Convex is configured but you want to test the UI without signing in, set `CLIPFACTORY_AUTH_DISABLED=true` in `.env.local` and run `npm run dev`. This forces the existing read-only sample workspace and is ignored outside development; live uploads, billing, and processing remain unavailable.
+
 ### 2. Convex and auth
 
 Create or select a Convex deployment:
