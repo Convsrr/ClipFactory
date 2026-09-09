@@ -6,19 +6,22 @@ import { claimJob, deliverCallback, sendHeartbeat } from "./control-plane.js";
 import { processJob } from "./pipeline.js";
 import { storageConfigured } from "./storage.js";
 import { cleanupStaleWorkerDirectories } from "./temp-cleanup.js";
+import { transcriptionConfigured } from "./transcription.js";
+import { loadWorkerEnv } from "./env.js";
 import type { WorkerJob } from "./types.js";
 import { buildHealthResponse, requiredCapabilitiesReady } from "./health.js";
 
 type ActiveJob = { job: WorkerJob; progress: number; startedAt: number; leaseLost: boolean };
 
 async function main() {
+  loadWorkerEnv();
   const config = loadWorkerConfig();
   const startedAt = Date.now();
   const activeJobs = new Map<string, ActiveJob>();
   const capabilities = {
     ...(await checkMediaCapabilities()),
     storage: storageConfigured(),
-    transcription: Boolean(process.env.WHISPER_BASE_URL?.trim()),
+    transcription: transcriptionConfigured(),
     faceTracker: Boolean(process.env.FACE_TRACKER_URL?.trim()),
   };
   const readyToProcess = requiredCapabilitiesReady(capabilities);

@@ -31,7 +31,7 @@ Public pages live at `/`, `/pricing`, `/sign-in`, and `/sign-up`. The signed-in 
 Each project runs through these durable workflow stages:
 
 1. `ingest` downloads the source, inspects it, creates a proxy, and extracts audio.
-2. `transcribe` calls the configured faster-whisper-compatible service.
+2. `transcribe` calls the configured ElevenLabs Scribe or legacy Whisper-compatible service.
 3. `analyse` asks g0i.ai for structured clip candidates and validates the JSON with Zod.
 4. `scene_detect` records FFmpeg scene changes.
 5. `face_track` calls an optional provider through a normalized crop-track contract. Tracks are persisted in absolute source-video seconds with normalized focus coordinates; unavailable, malformed, or low-confidence tracking falls back to deterministic centre framing.
@@ -58,7 +58,7 @@ Every public query and mutation derives the user from the authenticated Convex i
 - Node.js 20.9 or newer
 - FFmpeg and FFprobe (the worker needs an FFmpeg build with the `subtitles`/libass filter for burned ASS captions)
 - `yt-dlp` if YouTube ingestion is enabled
-- Convex, R2/S3, g0i.ai, Stripe, and transcription-service accounts for the live pipeline
+- Convex, R2/S3, g0i.ai, Stripe, and ElevenLabs accounts for the live pipeline
 
 Install JavaScript dependencies and create local configuration:
 
@@ -130,7 +130,23 @@ Direct browser uploads require bucket CORS for your app origin:
 
 ### 4. Transcription and worker
 
-`WHISPER_BASE_URL` must accept `POST /transcribe` with a multipart `file`. It should return:
+ElevenLabs Scribe is the default transcription integration. Create an ElevenLabs API key and configure these values in the Railway worker service (never expose the key as a `NEXT_PUBLIC_*` variable):
+
+```bash
+TRANSCRIPTION_PROVIDER=elevenlabs
+ELEVENLABS_API_KEY=your-elevenlabs-key
+ELEVENLABS_BASE_URL=https://api.elevenlabs.io/v1
+ELEVENLABS_STT_MODEL_ID=scribe_v2
+ELEVENLABS_DIARIZE=false
+ELEVENLABS_NO_VERBATIM=false
+TRANSCRIPTION_TIMEOUT_MS=900000
+```
+
+The worker sends the normalized 16 kHz WAV to ElevenLabs as multipart form data, requests word timestamps, ignores non-word timeline entries, and creates bounded caption segments from the returned words. Set `ELEVENLABS_DIARIZE=true` only when speaker labels are needed. The API key is used server-side by the worker and must not be committed or sent to the browser. See the [ElevenLabs speech-to-text API reference](https://elevenlabs.io/docs/api-reference/speech-to-text/convert) for the provider contract and [authentication guidance](https://elevenlabs.io/docs/api-reference/authentication) for key handling.
+
+Standalone worker commands load `.env.local` during local development. In Railway, set the same variables in the worker service's environment; the worker does not read local env files when `NODE_ENV=production`.
+
+The legacy Whisper-compatible adapter remains available for an existing internal service. Set `TRANSCRIPTION_PROVIDER=whisper`, then `WHISPER_BASE_URL` must accept `POST /transcribe` with a multipart `file`. It should return:
 
 ```json
 {
@@ -150,7 +166,7 @@ npm run dev
 
 The worker exposes only `GET /health`; it no longer accepts pushed jobs. It polls `CONVEX_SITE_URL/worker/claim`, heartbeats to `/worker/heartbeat`, and delivers attempt-scoped results to `/worker/callback`. The Convex HTTP actions authenticate those requests with separate shared and callback secrets. Put both services behind TLS and restrict worker egress/ingress at the infrastructure layer.
 
-Run `npm run worker:check` before starting traffic. It reports FFmpeg, FFprobe, subtitles/libass, yt-dlp, storage, transcription, and optional face-tracker capability without printing paths or credentials. Missing FFmpeg, FFprobe, subtitles, storage, or transcription makes health return 503; yt-dlp and face tracking are optional for upload processing.
+Run `npm run worker:check` before starting traffic. It reports FFmpeg, FFprobe, subtitles/libass, yt-dlp, storage, transcription, and optional face-tracker capability without printing paths or credentials. Missing FFmpeg, FFprobe, subtitles, storage, or a configured transcription provider makes health return 503; yt-dlp and face tracking are optional for upload processing. Railway's injected `PORT` is authoritative when present; `WORKER_PORT` is only the local fallback.
 
 Failed projects can resume through authenticated `POST /api/projects/[projectId]/retry`. The backend preserves applied stages and starts a new workflow at the first incomplete stage. A user may process at most three projects concurrently; upload signing, project creation, retry, and metadata regeneration also use per-user token-bucket limits.
 
@@ -179,6 +195,7 @@ npm run test:reliability # Claims, leases, callbacks, retries, debits, and auth 
 npm run dev              # Next.js development server
 npm run typecheck        # App, Convex, and shared TypeScript
 npm run worker:typecheck # Worker-specific Node TypeScript
+npm run worker:build     # Compile the production worker image entrypoint
 npm run lint             # ESLint
 npm run build            # Production Next.js build (webpack)
 npm run worker:dev       # Local media worker
@@ -186,9 +203,13 @@ npm run worker:check     # Safe binary/service capability report
 npm run convex:dev       # Live Convex development sync
 ```
 
+### Railway worker deployment
+
+Deploy the worker as a separate Railway service from this repository and set its Dockerfile path to `Dockerfile.worker`. The image installs FFmpeg, the `subtitles`/libass filter, and `yt-dlp`, compiles the worker, and starts it with `npm run worker:start`. Add the worker-only variables from `.env.example` to that service, including `CONVEX_SITE_URL`, both worker secrets, the R2 account ID/access key/secret/bucket/public delivery URL, and `ELEVENLABS_API_KEY`. Leave `WORKER_PORT` unset so Railway's injected `PORT` is used. The service health check path is `GET /health`.
+
 ## Remaining production boundaries
 
-- The automated reliability suite uses `convex-test` and mocked HTTP delivery. Run a disposable, credentialed Convex/R2/transcription environment with a generated long video before paid traffic; the normal test command intentionally needs no external account.
+- The automated reliability suite uses `convex-test` and mocked HTTP delivery. Run a disposable, credentialed Convex/R2/ElevenLabs environment with a generated long video before paid traffic; the normal test command intentionally needs no external account.
 - `worker/src/media-security.ts` is the explicit malware/file-scanner integration boundary. No malware engine is bundled, and FFprobe validation is not presented as malware protection.
 - Expired upload intents are recorded but R2 deletion requires a separately deployed cleanup process with access to both Convex cleanup candidates and the bucket. Attached sources are retained for project retry.
 - Face tracking remains an integration boundary, not an embedded model. Set `FACE_TRACKER_URL` and optionally `FACE_TRACKER_API_KEY` when a provider is available. The worker validates provider responses, chooses a stable primary subject, smooths crop movement, and keeps rendering with centre framing when the provider is unavailable.

@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { RELIABILITY_DEFAULTS } from "../../shared/reliability.js";
+import { requireTranscriptionProvider } from "./transcription.js";
 
 export type WorkerConfig = ReturnType<typeof loadWorkerConfig>;
 
 export function loadWorkerConfig() {
-  for (const name of ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "WHISPER_BASE_URL"]) requiredEnv(name);
+  for (const name of ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"]) requiredEnv(name);
+  requireTranscriptionProvider();
   const workerId = process.env.WORKER_ID?.trim() || `${safeHost()}-${process.pid}-${randomUUID().slice(0, 8)}`;
   if (!/^[a-zA-Z0-9._:-]{1,120}$/.test(workerId)) throw new Error("WORKER_ID must contain only letters, numbers, dot, underscore, colon, or hyphen");
   const controlBaseUrl = webUrl(requiredEnv("CONVEX_SITE_URL"), "CONVEX_SITE_URL");
@@ -13,7 +15,7 @@ export function loadWorkerConfig() {
   const callbackSecret = requiredEnv("WORKER_CALLBACK_SECRET");
   if (sharedSecret.length < 16 || callbackSecret.length < 16) throw new Error("Worker secrets must contain at least 16 characters");
   return {
-    port: boundedNumber("WORKER_PORT", 8788, 1, 65_535),
+    port: workerPort(),
     workerId,
     maxParallel: boundedNumber("WORKER_MAX_PARALLEL", 2, 1, 16),
     heartbeatMs: boundedNumber("WORKER_HEARTBEAT_MS", RELIABILITY_DEFAULTS.workerHeartbeatMs, 10_000, 60_000),
@@ -25,6 +27,12 @@ export function loadWorkerConfig() {
     callbackSecret,
     version: (process.env.RELEASE_SHA || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || "development").slice(0, 64),
   };
+}
+
+function workerPort() {
+  if (process.env.PORT?.trim()) return boundedNumber("PORT", 8788, 1, 65_535);
+  if (process.env.WORKER_PORT?.trim()) return boundedNumber("WORKER_PORT", 8788, 1, 65_535);
+  return 8788;
 }
 
 function requiredEnv(name: string) {

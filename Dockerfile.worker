@@ -1,0 +1,32 @@
+# Railway worker image: use the Dockerfile path Dockerfile.worker for the worker service.
+FROM node:20-bookworm-slim AS build
+
+ENV NEXT_TELEMETRY_DISABLED=1
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates ffmpeg yt-dlp \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY shared ./shared
+COPY worker ./worker
+RUN npm run worker:build
+
+FROM node:20-bookworm-slim AS runtime
+
+ENV NODE_ENV=production
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates ffmpeg yt-dlp \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY --from=build /app/dist ./dist
+
+CMD ["npm", "run", "worker:start"]

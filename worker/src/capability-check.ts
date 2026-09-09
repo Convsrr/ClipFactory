@@ -1,12 +1,15 @@
 import { checkMediaCapabilities } from "./ffmpeg.js";
 import { CAPABILITY_REQUIREMENTS, requiredCapabilitiesReady } from "./health.js";
 import { storageConfigured } from "./storage.js";
+import { transcriptionConfigured } from "./transcription.js";
+import { loadWorkerEnv } from "./env.js";
 
 async function main() {
+  loadWorkerEnv();
   const capabilities = {
     ...(await checkMediaCapabilities()),
     storage: storageConfigured(),
-    transcription: Boolean(process.env.WHISPER_BASE_URL?.trim()),
+    transcription: transcriptionConfigured(),
     faceTracker: Boolean(process.env.FACE_TRACKER_URL?.trim()),
   };
   const requiredReady = requiredCapabilitiesReady(capabilities);
