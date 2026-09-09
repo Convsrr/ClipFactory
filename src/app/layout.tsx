@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { AppProviders } from "@/components/app-providers";
+import { isBackendConfigured } from "@/lib/app-mode";
 import { resolveSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
@@ -35,7 +36,7 @@ export const viewport: Viewport = {
 };
 
 function BackendProvider({ children }: { children: React.ReactNode }) {
-  if (!process.env.NEXT_PUBLIC_CONVEX_URL) return children;
+  if (!isBackendConfigured()) return children;
   return <ConvexAuthNextjsServerProvider>{children}</ConvexAuthNextjsServerProvider>;
 }
 
