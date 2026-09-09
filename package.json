@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:reliability",
-    "test:unit": "node --import tsx --test test/app-mode.test.ts test/clip-analysis.test.ts test/google-drive.test.ts test/site-url.test.ts test/transcription.test.ts test/video-engine.test.ts",
+    "test:unit": "node --import tsx --test test/app-mode.test.ts test/clip-analysis.test.ts test/google-drive.test.ts test/site-url.test.ts test/transcription.test.ts test/video-engine.test.ts test/youtube-url.test.ts",
     "test:reliability": "vitest run test/reliability.convex.test.ts test/vitest/worker-reliability.test.ts",
     "convex:dev": "convex dev",
     "convex:codegen": "convex codegen",

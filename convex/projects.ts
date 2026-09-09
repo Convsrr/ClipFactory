@@ -7,6 +7,7 @@ import { requireUserId } from "./lib/auth";
 import { presentClip, presentProjectSummary } from "./lib/presenters";
 import { clipSummaryValidator, projectSummaryValidator, timelineItemValidator } from "./lib/validators";
 import { PRODUCT_LIMITS, PROCESSING_STAGES, progressAfterStage, resumeStageForHistory, stageIndex, type ProcessingStage } from "../shared/reliability";
+import { canonicalYoutubeUrl } from "../shared/youtube-url";
 import { rateLimit } from "./lib/rateLimits";
 import { stageNameValidator } from "./lib/stages";
 
@@ -135,10 +136,10 @@ export const createFromYoutube = mutation({
     await enforceProjectCapacity(ctx, userId);
     const user = await ctx.db.get(userId);
     if (!user || user.creditsRemaining <= 0) throw new Error("No processing credits remain");
-    const url = validatedYoutubeUrl(args.youtubeUrl);
+    const url = canonicalYoutubeUrl(args.youtubeUrl);
     const now = Date.now();
     const projectId = await ctx.db.insert("projects", { userId, title: cleanTitle(args.title), sourceType: "youtube", status: "processing", activeStage: "ingest", progress: 1, createdAt: now, updatedAt: now });
-    const videoId = await ctx.db.insert("videos", { projectId, userId, originalUrl: url.toString(), uploadStatus: "uploaded", createdAt: now, updatedAt: now });
+    const videoId = await ctx.db.insert("videos", { projectId, userId, originalUrl: url, uploadStatus: "uploaded", createdAt: now, updatedAt: now });
     await beginWorkflow(ctx, projectId, videoId);
     return { projectId: projectId as string, videoId: videoId as string };
   },
@@ -279,22 +280,6 @@ function assertOwnedSourceKey(userId: Id<"users">, objectKey: string) {
 async function enforceProjectCapacity(ctx: MutationCtx, userId: Id<"users">) {
   const processing = await ctx.db.query("projects").withIndex("by_userId_and_status", (q) => q.eq("userId", userId).eq("status", "processing")).take(PRODUCT_LIMITS.maxConcurrentProjectsPerUser);
   if (processing.length >= PRODUCT_LIMITS.maxConcurrentProjectsPerUser) throw new Error(`Only ${PRODUCT_LIMITS.maxConcurrentProjectsPerUser} projects can process at once`);
-}
-
-function validatedYoutubeUrl(value: string) {
-  const url = new URL(value);
-  if (url.protocol !== "https:") throw new Error("Enter a valid YouTube URL");
-  const hostname = url.hostname.toLowerCase();
-  const videoId = hostname === "youtu.be"
-    ? url.pathname.split("/").filter(Boolean)[0]
-    : (hostname === "youtube.com" || hostname === "www.youtube.com" || hostname === "m.youtube.com") && url.pathname === "/watch"
-      ? url.searchParams.get("v")
-      : null;
-  if (!videoId || !/^[a-zA-Z0-9_-]{6,20}$/.test(videoId)) throw new Error("Enter a valid YouTube video URL");
-  url.username = "";
-  url.password = "";
-  url.hash = "";
-  return url;
 }
 
 function validatedGoogleDriveUrl(value: string) {
