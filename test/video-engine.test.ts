@@ -188,6 +188,11 @@ test("ASS escaping protects text and dynamic crop uses a bounded expression", ()
   assert.match(buildVerticalVideoFilter(plan), /scale=1080:1920/);
 });
 
+test("static crop positions stay compact for untracked clips", () => {
+  const plan = buildCropPlan({ clipId: "clip-1", clipStartSec: 0, clipEndSec: 21.08, source: { width: 1280, height: 720, fps: 30 } });
+  assert.equal(buildPositionExpression(plan.keyframes, "x", plan.geometry.maxX), "438");
+});
+
 test("caption presets expose safe zones and validated keys", () => {
   for (const key of ["bold-viral", "minimal-clean", "podcast"] as const) {
     const preset = getCaptionPreset(key);

@@ -137,14 +137,16 @@ export function buildVerticalVideoFilter(cropPlan: CropPlan, captions?: string) 
 
 export function buildPositionExpression(keyframes: CropPlan["keyframes"], axis: "x" | "y", maximum: number) {
   if (maximum <= 0 || keyframes.length <= 1) return "0";
-  let expression = String(Math.round(keyframes.at(-1)?.[axis] ?? 0));
+  const positions = keyframes.map((keyframe) => Math.round(keyframe[axis]));
+  if (positions.every((position) => position === positions[0])) return String(positions[0] ?? 0);
+  let expression = String(positions.at(-1) ?? 0);
   for (let index = keyframes.length - 2; index >= 0; index -= 1) {
     const current = keyframes[index];
     const next = keyframes[index + 1];
     if (!current || !next) continue;
     const deltaTime = Math.max(0.001, next.timeSec - current.timeSec);
-    const currentPosition = Math.round(current[axis]);
-    const nextPosition = Math.round(next[axis]);
+    const currentPosition = positions[index] ?? 0;
+    const nextPosition = positions[index + 1] ?? currentPosition;
     const interpolation = `${currentPosition}+(${nextPosition - currentPosition})*(t-${formatNumber(current.timeSec)})/${formatNumber(deltaTime)}`;
     expression = `if(lt(t,${formatNumber(next.timeSec)}),${interpolation},${expression})`;
   }
