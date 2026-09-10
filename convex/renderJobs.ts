@@ -461,12 +461,13 @@ function isStageOutputs(value: unknown): value is {
   words?: Array<{ startSec: number; endSec: number; text: string; confidence?: number }>;
   engine?: string;
   clipAssets?: Array<{ clipId: string; previewUrl?: string; finalUrl?: string; thumbnailUrl?: string; previewObjectKey?: string; finalObjectKey?: string; thumbnailObjectKey?: string }>;
+  metadata?: unknown;
 } {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const keys = Object.keys(value);
   const outputKeys = new Set([
     "durationSec", "width", "height", "fps", "proxyUrl", "audioUrl", "proxyObjectKey", "audioObjectKey",
-    "language", "fullText", "segments", "words", "engine", "clipAssets",
+    "language", "fullText", "segments", "words", "engine", "clipAssets", "metadata",
   ]);
   return keys.every((key) => outputKeys.has(key));
 }
