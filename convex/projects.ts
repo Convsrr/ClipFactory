@@ -233,6 +233,57 @@ export const retryFailedProject = mutation({
   },
 });
 
+export const repairFailedProject = mutation({
+  args: { projectId: v.string() },
+  returns: v.object({ repaired: v.boolean(), clipCount: v.number() }),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await rateLimit(ctx, { name: "projectRepair", key: userId, throws: true });
+    const projectId = ctx.db.normalizeId("projects", args.projectId);
+    if (!projectId) throw new Error("Project not found");
+    const project = await ctx.db.get(projectId);
+    if (!project || project.userId !== userId) throw new Error("Project not found");
+    if (project.status !== "failed") throw new Error("Only a failed project can be repaired");
+    const [videos, clips, jobs] = await Promise.all([
+      ctx.db.query("videos").withIndex("by_projectId", (q) => q.eq("projectId", projectId)).take(1),
+      ctx.db.query("clips").withIndex("by_projectId", (q) => q.eq("projectId", projectId)).take(20),
+      ctx.db.query("renderJobs").withIndex("by_projectId", (q) => q.eq("projectId", projectId)).order("desc").take(64),
+    ]);
+    if (jobs.some((job) => job.status === "queued" || job.status === "running")) throw new Error("Project already has recoverable work");
+    const video = videos[0];
+    const clipRender = jobs.find((job) => job.type === "clip_render" && job.status === "complete" && job.appliedAt !== undefined);
+    const thumbnailRender = jobs.find((job) => job.type === "thumbnail_render" && job.status === "complete" && job.appliedAt !== undefined);
+    const finalAssets = readRenderedAssets(clipRender?.metadata).filter((asset) => asset.finalObjectKey);
+    const thumbnailAssets = readRenderedAssets(thumbnailRender?.metadata).filter((asset) => asset.thumbnailObjectKey);
+    const finalByClipId = new Map(finalAssets.map((asset) => [asset.clipId, asset]));
+    const thumbnailByClipId = new Map(thumbnailAssets.map((asset) => [asset.clipId, asset]));
+    if (!video || !clips.length || clips.some((clip) => !finalByClipId.get(clip._id as string)?.finalObjectKey || !thumbnailByClipId.get(clip._id as string)?.thumbnailObjectKey)) {
+      throw new Error("Complete rendered clip outputs are unavailable");
+    }
+    const now = Date.now();
+    for (const clip of clips) {
+      const finalAsset = finalByClipId.get(clip._id as string);
+      const thumbnailAsset = thumbnailByClipId.get(clip._id as string);
+      if (!finalAsset?.finalObjectKey || !thumbnailAsset?.thumbnailObjectKey) throw new Error("Complete rendered clip outputs are unavailable");
+      assertProjectOutputKey(userId, projectId, finalAsset.finalObjectKey);
+      assertProjectOutputKey(userId, projectId, thumbnailAsset.thumbnailObjectKey);
+      await ctx.db.patch(clip._id, {
+        previewUrl: finalAsset.previewUrl ?? clip.previewUrl,
+        finalUrl: finalAsset.finalUrl ?? clip.finalUrl,
+        previewObjectKey: finalAsset.previewObjectKey ?? finalAsset.finalObjectKey,
+        finalObjectKey: finalAsset.finalObjectKey,
+        thumbnailUrl: thumbnailAsset.thumbnailUrl ?? clip.thumbnailUrl,
+        thumbnailObjectKey: thumbnailAsset.thumbnailObjectKey,
+        status: "complete",
+        updatedAt: now,
+      });
+    }
+    await ctx.db.patch(projectId, { status: "complete", progress: 100, activeStage: "thumbnail_render", errorMessage: undefined, updatedAt: now });
+    await ctx.db.patch(video._id, { uploadStatus: "complete", updatedAt: now });
+    return { repaired: true, clipCount: clips.length };
+  },
+});
+
 export const expireUploadIntents = internalMutation({
   args: {},
   returns: v.object({ expired: v.number() }),
@@ -297,4 +348,27 @@ function validatedGoogleDriveUrl(value: string) {
   const fileId = pathMatch?.[1] ?? url.searchParams.get("id");
   if (!fileId || !/^[a-zA-Z0-9_-]{3,200}$/.test(fileId)) throw new Error("Enter a valid Google Drive file URL");
   return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+type RenderedAsset = {
+  clipId: string;
+  previewUrl?: string;
+  finalUrl?: string;
+  thumbnailUrl?: string;
+  previewObjectKey?: string;
+  finalObjectKey?: string;
+  thumbnailObjectKey?: string;
+};
+
+function readRenderedAssets(value: unknown): RenderedAsset[] {
+  if (!isRecord(value) || !Array.isArray(value.clipAssets)) return [];
+  return value.clipAssets.filter((asset): asset is RenderedAsset => isRecord(asset) && typeof asset.clipId === "string" && Object.entries(asset).every(([key, item]) => ["clipId", "previewUrl", "finalUrl", "thumbnailUrl", "previewObjectKey", "finalObjectKey", "thumbnailObjectKey"].includes(key) && (key === "clipId" || item === undefined || typeof item === "string")));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertProjectOutputKey(userId: Id<"users">, projectId: Id<"projects">, key: string) {
+  if (!key.startsWith(`${userId}/projects/${projectId}/`) || key.includes("..") || key.includes("\\")) throw new Error("Worker output key is outside the project namespace");
 }

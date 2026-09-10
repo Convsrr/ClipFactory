@@ -60,7 +60,7 @@ export function resumeStageForHistory(
   options: { hasStoredSource?: boolean; hasClips?: boolean } = {},
 ): ProcessingStage {
   const firstIncomplete = PROCESSING_STAGES.find((stage) => !jobs.some((job) => job.type === stage && job.status === "complete" && job.appliedAt !== undefined));
-  if (firstIncomplete === "ingest" && options.hasStoredSource && options.hasClips && jobs.some((job) => job.type === "caption_render" && job.status === "complete" && job.appliedAt !== undefined)) {
+  if (firstIncomplete === "ingest" && options.hasStoredSource && options.hasClips) {
     return "clip_render";
   }
   return firstIncomplete
