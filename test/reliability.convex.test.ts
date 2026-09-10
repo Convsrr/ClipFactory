@@ -254,6 +254,18 @@ describe("project retry and abuse boundaries", () => {
     expect(resumeStageForHistory(jobs)).toBe("face_track");
   });
 
+  test("a failed render workflow resumes from clips when stored media is available", async () => {
+    const jobs = [
+      { type: "ingest" as const, status: "failed" },
+      ...["transcribe", "analyse", "scene_detect", "face_track", "caption_render"].map((type) => ({
+        type: type as "transcribe" | "analyse" | "scene_detect" | "face_track" | "caption_render",
+        status: "complete",
+        appliedAt: Date.now(),
+      })),
+    ];
+    expect(resumeStageForHistory(jobs, { hasStoredSource: true, hasClips: true })).toBe("clip_render");
+  });
+
   test("another user cannot retry a failed project", async () => {
     const { t, projectId } = await seedJob({ status: "failed", stage: "face_track", attempt: 3 });
     const otherUserId = await t.run((ctx) => ctx.db.insert("users", {

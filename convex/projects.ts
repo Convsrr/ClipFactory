@@ -206,14 +206,18 @@ export const retryFailedProject = mutation({
     const project = await ctx.db.get(projectId);
     if (!project || project.userId !== userId) throw new Error("Project not found");
     if (project.status !== "failed") throw new Error("Only a failed project can be retried");
-    const [videos, jobs] = await Promise.all([
+    const [videos, jobs, clips] = await Promise.all([
       ctx.db.query("videos").withIndex("by_projectId", (q) => q.eq("projectId", projectId)).take(1),
       ctx.db.query("renderJobs").withIndex("by_projectId", (q) => q.eq("projectId", projectId)).order("desc").take(64),
+      ctx.db.query("clips").withIndex("by_projectId", (q) => q.eq("projectId", projectId)).take(20),
     ]);
     const video = videos[0];
     if (!video) throw new Error("Project source video is missing");
     if (jobs.some((job) => job.status === "queued" || job.status === "running")) throw new Error("Project already has recoverable work");
-    const startStage = resumeStageForHistory(jobs);
+    const startStage = resumeStageForHistory(jobs, {
+      hasStoredSource: Boolean(video.proxyObjectKey && video.audioObjectKey),
+      hasClips: clips.length > 0,
+    });
     const now = Date.now();
     const previousStage = PROCESSING_STAGES[stageIndex(startStage) - 1];
     await ctx.db.patch(projectId, {

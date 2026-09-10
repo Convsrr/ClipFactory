@@ -55,8 +55,15 @@ export function nextStage(stage: ProcessingStage): ProcessingStage | null {
   return PROCESSING_STAGES[stageIndex(stage) + 1] ?? null;
 }
 
-export function resumeStageForHistory(jobs: ReadonlyArray<{ type: ProcessingStage; status: string; appliedAt?: number }>): ProcessingStage {
-  return PROCESSING_STAGES.find((stage) => !jobs.some((job) => job.type === stage && job.status === "complete" && job.appliedAt !== undefined))
+export function resumeStageForHistory(
+  jobs: ReadonlyArray<{ type: ProcessingStage; status: string; appliedAt?: number }>,
+  options: { hasStoredSource?: boolean; hasClips?: boolean } = {},
+): ProcessingStage {
+  const firstIncomplete = PROCESSING_STAGES.find((stage) => !jobs.some((job) => job.type === stage && job.status === "complete" && job.appliedAt !== undefined));
+  if (firstIncomplete === "ingest" && options.hasStoredSource && options.hasClips && jobs.some((job) => job.type === "caption_render" && job.status === "complete" && job.appliedAt !== undefined)) {
+    return "clip_render";
+  }
+  return firstIncomplete
     ?? [...jobs].reverse().find((job) => job.status === "failed")?.type
     ?? "thumbnail_render";
 }
