@@ -53,7 +53,7 @@ export async function extractAudio(input: string, output: string) {
 }
 
 export async function downloadYoutube(url: string, output: string) {
-  await run(process.env.YT_DLP_PATH || "yt-dlp", ["--no-playlist", "--format", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4", "--output", output, url]);
+  await run(process.env.YT_DLP_PATH || "yt-dlp", ["--no-playlist", "--js-runtimes", "node", "--format", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b", "--merge-output-format", "mp4", "--output", output, url]);
 }
 
 export async function detectScenes(input: string) {

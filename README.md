@@ -146,6 +146,8 @@ The worker sends the normalized 16 kHz WAV to ElevenLabs as multipart form data,
 
 Standalone worker commands load `.env.local` during local development. In Railway, set the same variables in the worker service's environment; the worker does not read local env files when `NODE_ENV=production`.
 
+YouTube extraction uses yt-dlp's bundled EJS challenge solver with the Node.js runtime. Keep the worker on Node 22 or newer and use the official yt-dlp release bundled by `Dockerfile.worker`; the Debian `yt-dlp` package alone is not sufficient for current YouTube challenge responses.
+
 The legacy Whisper-compatible adapter remains available for an existing internal service. Set `TRANSCRIPTION_PROVIDER=whisper`, then `WHISPER_BASE_URL` must accept `POST /transcribe` with a multipart `file`. It should return:
 
 ```json
@@ -205,7 +207,7 @@ npm run convex:dev       # Live Convex development sync
 
 ### Railway worker deployment
 
-Deploy the worker as a separate Railway service from this repository. Set the service variable `RAILWAY_DOCKERFILE_PATH=Dockerfile.worker` (or choose `Dockerfile.worker` in the service's Dockerfile path setting). The image installs FFmpeg, the `subtitles`/libass filter, and `yt-dlp`, compiles the worker, and starts it with `npm run worker:start`. Add the worker-only variables from `.env.example` to that service, including `CONVEX_SITE_URL`, both worker secrets, the R2 account ID/access key/secret/bucket/public delivery URL, and `ELEVENLABS_API_KEY`. Leave `WORKER_PORT` unset so Railway's injected `PORT` is used. The service health check path is `GET /health`.
+Deploy the worker as a separate Railway service from this repository. Set the service variable `RAILWAY_DOCKERFILE_PATH=Dockerfile.worker` (or choose `Dockerfile.worker` in the service's Dockerfile path setting). The image installs FFmpeg with the `subtitles`/libass filter, downloads and checksum-verifies the official yt-dlp release, compiles the worker, and starts it with `npm run worker:start`. Add the worker-only variables from `.env.example` to that service, including `CONVEX_SITE_URL`, both worker secrets, the R2 account ID/access key/secret/bucket/public delivery URL, and `ELEVENLABS_API_KEY`. Leave `WORKER_PORT` unset so Railway's injected `PORT` is used. The service health check path is `GET /health`.
 
 ## Remaining production boundaries
 
