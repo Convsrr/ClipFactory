@@ -106,6 +106,8 @@ export async function renderVerticalClip(options: RenderVerticalClipOptions): Pr
     "0:a:0?",
     "-c:v",
     "libx264",
+    "-threads",
+    "2",
     "-preset",
     "medium",
     "-crf",
