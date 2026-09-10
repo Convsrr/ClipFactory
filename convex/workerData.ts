@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
 import { PRODUCT_LIMITS } from "../shared/reliability";
-import { stageNameValidator, cropTrackValidator, mediaSegmentValidator, mediaWordValidator, captionTimingStrategyValidator } from "./lib/stages";
+import { stageNameValidator, cropTrackValidator, mediaSegmentValidator, mediaWordValidator, captionTimingStrategyValidator, sceneIntervalValidator } from "./lib/stages";
 
 type CropTrackPoint = {
   startSec: number;
@@ -21,6 +21,13 @@ type CropTrack = {
   tracks: CropTrackPoint[];
 };
 
+type SceneInterval = {
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  representativeSec: number;
+};
+
 export const payload = internalQuery({
   args: { jobId: v.id("renderJobs"), workerId: v.string(), attempt: v.number() },
   returns: v.object({
@@ -31,6 +38,7 @@ export const payload = internalQuery({
     sourceWidth: v.union(v.number(), v.null()), sourceHeight: v.union(v.number(), v.null()), sourceFps: v.union(v.number(), v.null()),
     sourceFileSizeBytes: v.union(v.number(), v.null()), maxSourceFileBytes: v.number(), maxSourceDurationSec: v.number(),
     sceneTimestamps: v.array(v.number()),
+    sceneIntervals: v.array(sceneIntervalValidator),
     clips: v.array(v.object({
       id: v.string(), startSec: v.number(), endSec: v.number(), captionPresetKey: v.string(), transcriptExcerpt: v.string(),
       transcriptSegments: v.array(mediaSegmentValidator), transcriptWords: v.array(mediaWordValidator),
@@ -60,6 +68,7 @@ export const payload = internalQuery({
     const latestFaceOutput = latestStageOutput(jobs, "face_track");
     const latestCaptionOutput = latestStageOutput(jobs, "caption_render");
     const sceneTimestamps = readSceneTimestamps(latestSceneOutput);
+    const sceneIntervals = readSceneIntervals(latestSceneOutput);
     const cropTracks = readCropTracks(latestFaceOutput);
     const captionTiming = readCaptionTiming(latestCaptionOutput);
     const currentTranscript = transcript[0];
@@ -84,6 +93,7 @@ export const payload = internalQuery({
       maxSourceFileBytes: project.sourceType === "google_drive" ? PRODUCT_LIMITS.maxRemoteSourceFileBytes : PRODUCT_LIMITS.maxSourceFileBytes,
       maxSourceDurationSec: PRODUCT_LIMITS.maxSourceDurationSec,
       sceneTimestamps,
+      sceneIntervals,
       clips: clips.map((clip) => ({
         id: clip._id as string,
         startSec: clip.startSec,
@@ -107,6 +117,15 @@ function latestStageOutput(jobs: Array<{ type: string; status: string; metadata?
 function readSceneTimestamps(value: unknown) {
   const metadata = stageMetadata(value);
   return arrayValue(metadata?.sceneTimestamps).filter(isFiniteNumber).sort((a, b) => a - b);
+}
+
+function readSceneIntervals(value: unknown): SceneInterval[] {
+  const metadata = stageMetadata(value);
+  return arrayValue(metadata?.sceneIntervals).flatMap((item) => {
+    if (!isRecord(item) || !isFiniteNumber(item.startSec) || !isFiniteNumber(item.endSec) || !isFiniteNumber(item.durationSec) || !isFiniteNumber(item.representativeSec)) return [];
+    if (item.startSec < 0 || item.endSec <= item.startSec || item.durationSec <= 0 || item.representativeSec < item.startSec || item.representativeSec > item.endSec) return [];
+    return [{ startSec: item.startSec, endSec: item.endSec, durationSec: item.durationSec, representativeSec: item.representativeSec }];
+  });
 }
 
 function readCropTracks(value: unknown): CropTrack[] {

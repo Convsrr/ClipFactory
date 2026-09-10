@@ -2,7 +2,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeCaptionFile } from "./captions.js";
-import { createProxy, createThumbnail, detectScenes, downloadYoutube, extractAudio, inspectVideo, renderVerticalClip } from "./ffmpeg.js";
+import { buildSceneIntervals, createProxy, createThumbnail, detectScenes, downloadYoutube, extractAudio, inspectVideo, MIN_SCENE_GAP_SEC, renderVerticalClip, SCENE_THRESHOLD } from "./ffmpeg.js";
 import { downloadGoogleDrive } from "./google-drive.js";
 import { trackWithOptionalProvider } from "./face-tracking.js";
 import type { RenderStat } from "./media-types.js";
@@ -92,9 +92,11 @@ async function scenes(job: WorkerJob, workDir: string, reportProgress: (progress
   reportProgress(10);
   const source = await localProxy(job, workDir);
   reportProgress(30);
+  const sourceMetadata = await inspectVideo(source);
   const sceneTimestamps = await detectScenes(source);
+  const sceneIntervals = buildSceneIntervals(sceneTimestamps, sourceMetadata.durationSec);
   reportProgress(95);
-  return { metadata: { sceneTimestamps, threshold: 0.35 } };
+  return { metadata: { sceneTimestamps, sceneIntervals, threshold: SCENE_THRESHOLD, minimumSceneGapSec: MIN_SCENE_GAP_SEC } };
 }
 
 async function faceTracking(job: WorkerJob, reportProgress: (progress: number) => void) {

@@ -2,6 +2,11 @@ import { spawn } from "node:child_process";
 import { z } from "zod";
 import { buildCropPlan, type CropPlan, type CropPlanInput, type SourceDimensions } from "./crop.js";
 import { WorkerError } from "./errors.js";
+import { sceneIntervalSchema, type SceneInterval } from "./media-types.js";
+
+export const SCENE_THRESHOLD = 0.35;
+export const MIN_SCENE_GAP_SEC = 1.5;
+export const FINAL_AUDIO_FILTER = "loudnorm=I=-14:TP=-1.5:LRA=11";
 
 const probeSchema = z.object({
   format: z.object({ duration: z.coerce.number().positive(), format_name: z.string().min(1).optional() }),
@@ -57,8 +62,38 @@ export async function downloadYoutube(url: string, output: string) {
 }
 
 export async function detectScenes(input: string) {
-  const result = await run(process.env.FFMPEG_PATH || "ffmpeg", ["-i", input, "-filter:v", "select='gt(scene,0.35)',showinfo", "-f", "null", "-"]);
-  return Array.from(result.stderr.matchAll(/pts_time:([0-9.]+)/g), (match) => Number(match[1])).filter(Number.isFinite);
+  const result = await run(process.env.FFMPEG_PATH || "ffmpeg", ["-i", input, "-filter:v", `select='gt(scene,${SCENE_THRESHOLD})',showinfo`, "-f", "null", "-"]);
+  const timestamps = Array.from(result.stderr.matchAll(/pts_time:([0-9.]+)/g), (match) => Number(match[1])).filter(Number.isFinite);
+  return cleanSceneTimestamps(timestamps);
+}
+
+export function cleanSceneTimestamps(timestamps: number[], minimumGapSec = MIN_SCENE_GAP_SEC) {
+  if (!Number.isFinite(minimumGapSec) || minimumGapSec <= 0) throw new Error("Minimum scene gap must be positive");
+  const sorted = [...new Set(timestamps.filter((timestamp) => Number.isFinite(timestamp) && timestamp >= 0))].sort((a, b) => a - b);
+  const cleaned: number[] = [];
+  for (const timestamp of sorted) {
+    const previous = cleaned.at(-1);
+    if (previous === undefined || timestamp - previous >= minimumGapSec) cleaned.push(timestamp);
+  }
+  return cleaned;
+}
+
+export function buildSceneIntervals(sceneTimestamps: number[], durationSec: number, minimumGapSec = MIN_SCENE_GAP_SEC): SceneInterval[] {
+  if (!Number.isFinite(durationSec) || durationSec <= 0) throw new Error("Scene duration must be positive");
+  const cuts = cleanSceneTimestamps(sceneTimestamps, minimumGapSec)
+    .filter((timestamp) => timestamp > 0 && timestamp < durationSec);
+  const boundaries = [0, ...cuts, durationSec];
+  return boundaries.slice(0, -1).flatMap((startSec, index) => {
+    const endSec = boundaries[index + 1];
+    if (endSec === undefined || endSec <= startSec) return [];
+    const interval = {
+      startSec,
+      endSec,
+      durationSec: endSec - startSec,
+      representativeSec: startSec + (endSec - startSec) / 2,
+    } satisfies SceneInterval;
+    return [sceneIntervalSchema.parse(interval)];
+  });
 }
 
 export type RenderVerticalClipOptions = {
@@ -118,6 +153,8 @@ export async function renderVerticalClip(options: RenderVerticalClipOptions): Pr
     "aac",
     "-b:a",
     "160k",
+    "-af",
+    FINAL_AUDIO_FILTER,
     "-movflags",
     "+faststart",
     options.output,

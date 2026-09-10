@@ -16,6 +16,12 @@ const heartbeatSchema = z.object({
 
 const cropStrategySchema = z.enum(["face_track", "static_face", "source_center", "scene_aware_center", "safe_center"]);
 const captionTimingStrategySchema = z.enum(["word", "segment", "estimated"]);
+const sceneIntervalSchema = z.object({
+  startSec: z.number().finite().nonnegative(),
+  endSec: z.number().finite().positive(),
+  durationSec: z.number().finite().positive(),
+  representativeSec: z.number().finite().nonnegative(),
+}).refine((value) => value.endSec > value.startSec && value.durationSec > 0 && value.representativeSec >= value.startSec && value.representativeSec <= value.endSec);
 const cropTrackSchema = z.object({
   clipId: z.string(),
   timebase: z.literal("absolute-video-seconds"),
@@ -37,7 +43,9 @@ const stageMetadataSchema = z.object({
   tracker: z.string().max(120).optional(),
   cropTracks: z.array(cropTrackSchema).max(20).optional(),
   sceneTimestamps: z.array(z.number().finite().nonnegative()).max(20_000).optional(),
+  sceneIntervals: z.array(sceneIntervalSchema).max(20_001).optional(),
   threshold: z.number().optional(),
+  minimumSceneGapSec: z.number().finite().positive().optional(),
   captionObjectKeys: z.array(z.string().max(800)).max(20).optional(),
   captionTiming: z.array(z.object({ clipId: z.string(), timingStrategy: captionTimingStrategySchema, phraseCount: z.number(), wordHighlighting: z.boolean() })).max(20).optional(),
   renderStats: z.array(z.object({

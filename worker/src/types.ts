@@ -3,6 +3,7 @@ import {
   captionPresetKeySchema,
   captionTimingStrategySchema,
   cropTrackSchema,
+  sceneIntervalSchema,
   transcriptSegmentSchema,
   transcriptWordSchema,
   type CaptionTimingSummary,
@@ -50,6 +51,7 @@ export const jobSchema = z.object({
   maxSourceDurationSec: z.number().finite().positive(),
   /** Scene timestamps use the same absolute source-video timebase as crop tracks. */
   sceneTimestamps: z.array(z.number().finite().nonnegative()),
+  sceneIntervals: z.array(sceneIntervalSchema).default([]),
   clips: z.array(workerClipSchema).max(20),
 }).superRefine((value, context) => {
   const keys = [value.originalObjectKey, value.proxyObjectKey, value.audioObjectKey, value.outputPrefix].filter((key): key is string => Boolean(key));
@@ -84,6 +86,13 @@ export type StageMetadata = {
   tracker?: string;
   cropTracks?: CropTrack[];
   sceneTimestamps?: number[];
+  sceneIntervals?: Array<{
+    startSec: number;
+    endSec: number;
+    durationSec: number;
+    representativeSec: number;
+  }>;
+  minimumSceneGapSec?: number;
   threshold?: number;
   captionObjectKeys?: string[];
   captionTiming?: CaptionTimingSummary[];

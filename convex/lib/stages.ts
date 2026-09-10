@@ -37,6 +37,12 @@ export const captionTimingValidator = v.object({
   phraseCount: v.number(),
   wordHighlighting: v.boolean(),
 });
+export const sceneIntervalValidator = v.object({
+  startSec: v.number(),
+  endSec: v.number(),
+  durationSec: v.number(),
+  representativeSec: v.number(),
+});
 export const renderStatValidator = v.object({
   clipId: v.string(),
   cropStrategy: cropStrategyValidator,
@@ -55,7 +61,9 @@ export const stageMetadataValidator = v.object({
   tracker: v.optional(v.string()),
   cropTracks: v.optional(v.array(cropTrackValidator)),
   sceneTimestamps: v.optional(v.array(v.number())),
+  sceneIntervals: v.optional(v.array(sceneIntervalValidator)),
   threshold: v.optional(v.number()),
+  minimumSceneGapSec: v.optional(v.number()),
   captionObjectKeys: v.optional(v.array(v.string())),
   captionTiming: v.optional(v.array(captionTimingValidator)),
   renderStats: v.optional(v.array(renderStatValidator)),

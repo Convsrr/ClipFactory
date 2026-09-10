@@ -33,6 +33,17 @@ export const cropTrackSchema = z.object({
 
 export type CropTrack = z.infer<typeof cropTrackSchema>;
 
+export const sceneIntervalSchema = z.object({
+  startSec: z.number().finite().nonnegative(),
+  endSec: z.number().finite().positive(),
+  durationSec: z.number().finite().positive(),
+  representativeSec: z.number().finite().nonnegative(),
+}).refine((value) => value.endSec > value.startSec && value.durationSec > 0 && value.representativeSec >= value.startSec && value.representativeSec <= value.endSec, {
+  message: "Scene interval bounds are invalid",
+});
+
+export type SceneInterval = z.infer<typeof sceneIntervalSchema>;
+
 export const transcriptSegmentSchema = z.object({
   startSec: z.number().finite().nonnegative(),
   endSec: z.number().finite().positive(),

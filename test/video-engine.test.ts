@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildCaptionTrack, escapeAssText, getCaptionPreset, clipTranscriptWords, segmentCaptionWords } from "../worker/src/captions";
 import { buildCropPlan, choosePrimaryCropTrack, calculateCropGeometry, smoothFocusPoints, type CropPlan } from "../worker/src/crop";
 import { normalizeFaceTrackerResponse } from "../worker/src/face-tracking";
-import { buildPositionExpression, buildVerticalVideoFilter } from "../worker/src/ffmpeg";
+import { buildPositionExpression, buildSceneIntervals, buildVerticalVideoFilter, cleanSceneTimestamps, FINAL_AUDIO_FILTER } from "../worker/src/ffmpeg";
 import type { CropTrack, CropTrackPoint, TranscriptWord } from "../worker/src/media-types";
 
 const landscape = { width: 1920, height: 1080, fps: 30 };
@@ -82,6 +82,18 @@ test("scene boundaries allow a new subject position immediately", () => {
     tuning: { sampleIntervalSec: 1 },
   });
   assert.equal(smoothed.find((item) => item.timeSec === 2)?.centerX, 0.8);
+});
+
+test("scene detection removes duplicate and rapid-fire timestamps", () => {
+  assert.deepEqual(cleanSceneTimestamps([6.5, 2.4, 2.45, 0.1, 6.5, 8.1]), [0.1, 2.4, 6.5, 8.1]);
+});
+
+test("scene timestamps become bounded intervals with midpoint representatives", () => {
+  assert.deepEqual(buildSceneIntervals([2, 2.4, 5], 8), [
+    { startSec: 0, endSec: 2, durationSec: 2, representativeSec: 1 },
+    { startSec: 2, endSec: 5, durationSec: 3, representativeSec: 3.5 },
+    { startSec: 5, endSec: 8, durationSec: 3, representativeSec: 6.5 },
+  ]);
 });
 
 test("low-confidence tracking falls back to deterministic centre framing", () => {
@@ -201,4 +213,8 @@ test("caption presets expose safe zones and validated keys", () => {
     assert.ok(preset.maxLines <= 2);
   }
   assert.equal(getCaptionPreset("not-a-preset").key, "minimal-clean");
+});
+
+test("final renders use a platform-safe loudness filter", () => {
+  assert.equal(FINAL_AUDIO_FILTER, "loudnorm=I=-14:TP=-1.5:LRA=11");
 });
