@@ -45,7 +45,7 @@ export async function checkMediaCapabilities() {
 }
 
 export async function createProxy(input: string, output: string) {
-  await run(process.env.FFMPEG_PATH || "ffmpeg", ["-y", "-i", input, "-vf", "scale='min(1280,iw)':-2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "27", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output]);
+  await run(process.env.FFMPEG_PATH || "ffmpeg", ["-y", "-i", input, "-vf", "scale='min(1280,iw)':-2", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "27", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output]);
 }
 
 export async function extractAudio(input: string, output: string) {
