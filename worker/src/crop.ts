@@ -84,7 +84,7 @@ export function buildCropPlan(input: CropPlanInput): CropPlan {
   const tuning = { ...CROP_TUNING, ...input.tuning };
   const relativePoints = relativeTrackPoints(input.cropTrack, input.clipStartSec, input.clipEndSec, durationSec, tuning.lowConfidenceThreshold);
   const fallbackStrategy: CropStrategy = input.sceneTimestamps?.length ? "scene_aware_center" : "source_center";
-  const strategy: CropStrategy = relativePoints.length ? "face_track" : fallbackStrategy;
+  const strategy: CropStrategy = relativePoints.length ? input.cropTrack?.kind === "action" ? "action_track" : "face_track" : fallbackStrategy;
   const sceneCuts = (input.sceneTimestamps ?? [])
     .filter((timestamp) => Number.isFinite(timestamp) && timestamp > input.clipStartSec && timestamp < input.clipEndSec)
     .map((timestamp) => timestamp - input.clipStartSec);

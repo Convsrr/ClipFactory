@@ -18,6 +18,12 @@ export const clipSummaryValidator = v.object({
   finalUrl: v.union(v.string(), v.null()),
   thumbnailUrl: v.union(v.string(), v.null()),
   captionStyle: v.union(v.literal("bold-viral"), v.literal("minimal-clean"), v.literal("podcast")),
+  renderMode: v.union(v.literal("auto"), v.literal("fit"), v.literal("sports"), v.literal("gameplay")),
+  showHook: v.boolean(),
+  showCta: v.boolean(),
+  ctaText: v.string(),
+  hasGameplayVideo: v.boolean(),
+  audioTrackIndex: v.number(),
 });
 
 export const projectSummaryValidator = v.object({

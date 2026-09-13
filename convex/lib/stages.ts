@@ -9,6 +9,7 @@ export const mediaSegmentValidator = v.object({ startSec: v.number(), endSec: v.
 export const mediaWordValidator = v.object({ startSec: v.number(), endSec: v.number(), text: v.string(), confidence: v.optional(v.number()) });
 export const cropStrategyValidator = v.union(
   v.literal("face_track"),
+  v.literal("action_track"),
   v.literal("static_face"),
   v.literal("source_center"),
   v.literal("scene_aware_center"),
@@ -28,6 +29,7 @@ export const cropTrackValidator = v.object({
   timebase: v.literal("absolute-video-seconds"),
   coordinateSpace: v.literal("normalized"),
   subjectId: v.optional(v.string()),
+  kind: v.optional(v.union(v.literal("face"), v.literal("action"))),
   tracks: v.array(cropTrackPointValidator),
 });
 export const captionTimingStrategyValidator = v.union(v.literal("word"), v.literal("segment"), v.literal("estimated"));
@@ -46,6 +48,7 @@ export const sceneIntervalValidator = v.object({
 export const renderStatValidator = v.object({
   clipId: v.string(),
   cropStrategy: cropStrategyValidator,
+  renderMode: v.union(v.literal("auto"), v.literal("fit"), v.literal("sports"), v.literal("gameplay")),
   cropKeyframeCount: v.number(),
   captionTimingStrategy: v.union(captionTimingStrategyValidator, v.null()),
   captionPhraseCount: v.union(v.number(), v.null()),

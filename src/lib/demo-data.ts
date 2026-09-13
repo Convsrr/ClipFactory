@@ -26,6 +26,12 @@ export const previewClips: ClipSummary[] = [
     finalUrl: null,
     thumbnailUrl: null,
     captionStyle: "bold-viral",
+    renderMode: "auto",
+    showHook: true,
+    showCta: false,
+    ctaText: "Follow for more",
+    hasGameplayVideo: false,
+    audioTrackIndex: 0,
   },
   {
     id: "demo-content-system",
@@ -45,6 +51,12 @@ export const previewClips: ClipSummary[] = [
     finalUrl: null,
     thumbnailUrl: null,
     captionStyle: "minimal-clean",
+    renderMode: "fit",
+    showHook: true,
+    showCta: false,
+    ctaText: "Follow for more",
+    hasGameplayVideo: false,
+    audioTrackIndex: 0,
   },
 ];
 

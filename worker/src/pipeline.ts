@@ -107,7 +107,7 @@ async function faceTracking(job: WorkerJob, reportProgress: (progress: number) =
     proxyObjectKey: job.proxyObjectKey,
     sourceWidth: job.sourceWidth,
     sourceHeight: job.sourceHeight,
-    clips: job.clips.map((clip) => ({ id: clip.id, startSec: clip.startSec, endSec: clip.endSec })),
+    clips: job.clips.map((clip) => ({ id: clip.id, startSec: clip.startSec, endSec: clip.endSec, trackingMode: clip.renderMode === "sports" ? "action" as const : "face" as const })),
   });
   reportProgress(95);
   return {
@@ -133,6 +133,10 @@ async function captions(job: WorkerJob, workDir: string, reportProgress: (progre
       clipEndSec: clip.endSec,
       words: clip.transcriptWords,
       segments: clip.transcriptSegments,
+      hookText: clip.hookText,
+      ctaText: clip.ctaText,
+      showHook: clip.showHook,
+      showCta: clip.showCta,
     });
     const key = `${job.outputPrefix}/captions/${clip.id}.ass`;
     await uploadObject(key, path, "text/x-ssa");
@@ -153,9 +157,12 @@ async function clips(job: WorkerJob, workDir: string, reportProgress: (progress:
   const clipAssets: NonNullable<StageOutputs["clipAssets"]> = [];
   const renderStats: RenderStat[] = [];
   for (const [index, clip] of job.clips.entries()) {
+    if (clip.audioTrackIndex > 0 && clip.audioTrackIndex >= probed.audioTrackCount) throw new Error(`Audio track ${clip.audioTrackIndex + 1} is not available for this source`);
     const captionPath = join(workDir, `${clip.id}.ass`);
     await downloadObject(`${job.outputPrefix}/captions/${clip.id}.ass`, captionPath);
     const output = join(workDir, `${clip.id}.mp4`);
+    const gameplayInput = clip.gameplayObjectKey ? join(workDir, `${clip.id}-gameplay.mp4`) : undefined;
+    if (clip.gameplayObjectKey && gameplayInput) await downloadObject(clip.gameplayObjectKey, gameplayInput);
     const renderStartedAt = Date.now();
     const rendered = await renderVerticalClip({
       input: source,
@@ -165,6 +172,9 @@ async function clips(job: WorkerJob, workDir: string, reportProgress: (progress:
       durationSec: clip.endSec - clip.startSec,
       source: { width: sourceWidth, height: sourceHeight, fps: probed.fps ?? job.sourceFps ?? undefined },
       crop: { clipId: clip.id, clipStartSec: clip.startSec, cropTrack: clip.cropTrack, sceneTimestamps: job.sceneTimestamps },
+      renderMode: clip.renderMode,
+      gameplayInput,
+      audioStreamIndex: clip.audioTrackIndex,
     });
     const finalObjectKey = `${job.outputPrefix}/clips/${clip.id}.mp4`;
     const finalUrl = await uploadObject(finalObjectKey, output, "video/mp4");
@@ -172,6 +182,7 @@ async function clips(job: WorkerJob, workDir: string, reportProgress: (progress:
     const stat: RenderStat = {
       clipId: clip.id,
       cropStrategy: rendered.cropPlan.strategy,
+      renderMode: clip.renderMode,
       cropKeyframeCount: rendered.cropPlan.keyframes.length,
       captionTimingStrategy: clip.captionTimingStrategy,
       captionPhraseCount: clip.captionPhraseCount,
@@ -182,7 +193,7 @@ async function clips(job: WorkerJob, workDir: string, reportProgress: (progress:
       outputHeight: 1920,
     };
     renderStats.push(stat);
-    console.info(JSON.stringify({ event: "clipfactory.render", jobId: job.jobId, projectId: job.projectId, clipId: clip.id, stage: "clip_render", cropStrategy: stat.cropStrategy, captionStrategy: stat.captionTimingStrategy, cropKeyframes: stat.cropKeyframeCount, captionPhrases: stat.captionPhraseCount, renderDurationMs: stat.renderDurationMs, sourceDimensions: `${sourceWidth}x${sourceHeight}`, outputDimensions: "1080x1920" }));
+    console.info(JSON.stringify({ event: "clipfactory.render", jobId: job.jobId, projectId: job.projectId, clipId: clip.id, stage: "clip_render", renderMode: stat.renderMode, cropStrategy: stat.cropStrategy, captionStrategy: stat.captionTimingStrategy, cropKeyframes: stat.cropKeyframeCount, captionPhrases: stat.captionPhraseCount, renderDurationMs: stat.renderDurationMs, sourceDimensions: `${sourceWidth}x${sourceHeight}`, outputDimensions: "1080x1920" }));
     reportProgress(progressForItem(index, job.clips.length));
   }
   return { clipAssets, metadata: { renderStats } };

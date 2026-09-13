@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { z } from "zod";
 import { buildCropPlan, type CropPlan, type CropPlanInput, type SourceDimensions } from "./crop.js";
 import { WorkerError } from "./errors.js";
-import { sceneIntervalSchema, type SceneInterval } from "./media-types.js";
+import { sceneIntervalSchema, type RenderMode, type SceneInterval } from "./media-types.js";
 
 export const SCENE_THRESHOLD = 0.35;
 export const MIN_SCENE_GAP_SEC = 1.5;
@@ -26,7 +26,7 @@ export async function inspectVideo(input: string, maximumDurationSec = Number.PO
     const [numerator, denominator] = (video.avg_frame_rate ?? "0/1").split("/").map(Number);
     const fps = denominator ? numerator / denominator : undefined;
     if (fps !== undefined && (!Number.isFinite(fps) || fps <= 0 || fps > 240)) throw new WorkerError("INVALID_MEDIA", "Source frame rate is malformed", false);
-    return { durationSec: parsed.format.duration, width: video.width, height: video.height, fps, codec: video.codec_name, container: parsed.format.format_name };
+    return { durationSec: parsed.format.duration, width: video.width, height: video.height, fps, codec: video.codec_name, container: parsed.format.format_name, audioTrackCount: parsed.streams.filter((stream) => stream.codec_type === "audio").length };
   } catch (error) {
     if (error instanceof WorkerError) throw error;
     throw new WorkerError("INVALID_MEDIA", `FFprobe could not validate the source media: ${error instanceof Error ? error.message : "invalid response"}`, false, { cause: error });
@@ -50,7 +50,7 @@ export async function checkMediaCapabilities() {
 }
 
 export async function createProxy(input: string, output: string) {
-  await run(process.env.FFMPEG_PATH || "ffmpeg", ["-y", "-i", input, "-vf", "scale='min(1280,iw)':-2", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "27", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output]);
+  await run(process.env.FFMPEG_PATH || "ffmpeg", ["-y", "-i", input, "-map", "0:v:0", "-map", "0:a?", "-vf", "scale='min(1280,iw)':-2", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "27", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output]);
 }
 
 export async function extractAudio(input: string, output: string) {
@@ -105,6 +105,9 @@ export type RenderVerticalClipOptions = {
   source?: SourceDimensions;
   cropPlan?: CropPlan;
   crop?: Omit<CropPlanInput, "source" | "clipEndSec">;
+  renderMode?: RenderMode;
+  gameplayInput?: string;
+  audioStreamIndex?: number;
 };
 
 export type RenderVerticalClipResult = {
@@ -124,21 +127,24 @@ export async function renderVerticalClip(options: RenderVerticalClipOptions): Pr
     sceneTimestamps: options.crop?.sceneTimestamps,
     tuning: options.crop?.tuning,
   });
-  const filter = buildVerticalVideoFilter(cropPlan, options.captions);
+  const renderMode = options.renderMode ?? "auto";
+  if (renderMode === "gameplay" && !options.gameplayInput) throw new Error("Gameplay mode requires a gameplay video");
+  const filter = renderMode === "gameplay"
+    ? buildGameplayVideoFilter(options.captions)
+    : `[0:v]${buildVerticalVideoFilter(cropPlan, options.captions, renderMode)}[vout]`;
+  const inputArgs = ["-ss", String(Math.max(0, options.startSec)), "-i", options.input];
+  if (options.gameplayInput) inputArgs.push("-stream_loop", "-1", "-i", options.gameplayInput);
   await run(process.env.FFMPEG_PATH || "ffmpeg", [
     "-y",
-    "-ss",
-    String(Math.max(0, options.startSec)),
-    "-i",
-    options.input,
+    ...inputArgs,
     "-t",
     String(Math.max(0.01, options.durationSec)),
-    "-vf",
+    "-filter_complex",
     filter,
     "-map",
-    "0:v:0",
+    "[vout]",
     "-map",
-    "0:a:0?",
+    `0:a:${Math.max(0, Math.floor(options.audioStreamIndex ?? 0))}?`,
     "-c:v",
     "libx264",
     "-threads",
@@ -162,16 +168,28 @@ export async function renderVerticalClip(options: RenderVerticalClipOptions): Pr
   return { cropPlan, outputWidth: 1080, outputHeight: 1920 };
 }
 
-export function buildVerticalVideoFilter(cropPlan: CropPlan, captions?: string) {
-  const filters = cropPlan.geometry.mode === "fit"
-    ? ["scale=1080:1920:force_original_aspect_ratio=decrease", "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black"]
-    : [
+export function buildVerticalVideoFilter(cropPlan: CropPlan, captions?: string, renderMode: Exclude<RenderMode, "gameplay"> = "auto") {
+  const shouldFit = renderMode === "fit" || (renderMode === "sports" && cropPlan.strategy !== "action_track");
+  if (shouldFit || cropPlan.geometry.mode === "fit") {
+    const subtitle = captions ? `,subtitles=filename='${escapeSubtitlePath(captions)}'` : "";
+    return `split=2[blurbase][full];[blurbase]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=32:16[blurred];[full]scale=1080:1920:force_original_aspect_ratio=decrease[contained];[blurred][contained]overlay=(W-w)/2:(H-h)/2,setsar=1${subtitle}`;
+  }
+  const filters = [
         `crop=w=${cropPlan.geometry.cropWidth}:h=${cropPlan.geometry.cropHeight}:x='${buildPositionExpression(cropPlan.keyframes, "x", cropPlan.geometry.maxX)}':y='${buildPositionExpression(cropPlan.keyframes, "y", cropPlan.geometry.maxY)}'`,
         "scale=1080:1920:flags=lanczos",
       ];
   filters.push("setsar=1");
   if (captions) filters.push(`subtitles=filename='${escapeSubtitlePath(captions)}'`);
   return filters.join(",");
+}
+
+export function buildGameplayVideoFilter(captions?: string) {
+  const subtitle = captions ? `,subtitles=filename='${escapeSubtitlePath(captions)}'` : "";
+  return [
+    "[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[primary]",
+    "[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[gameplay]",
+    `[primary][gameplay]vstack=inputs=2,setsar=1${subtitle}[vout]`,
+  ].join(";");
 }
 
 export function buildPositionExpression(keyframes: CropPlan["keyframes"], axis: "x" | "y", maximum: number) {

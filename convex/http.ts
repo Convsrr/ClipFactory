@@ -14,7 +14,8 @@ const heartbeatSchema = z.object({
   progress: z.number().min(0).max(100).optional(),
 });
 
-const cropStrategySchema = z.enum(["face_track", "static_face", "source_center", "scene_aware_center", "safe_center"]);
+const cropStrategySchema = z.enum(["face_track", "action_track", "static_face", "source_center", "scene_aware_center", "safe_center"]);
+const renderModeSchema = z.enum(["auto", "fit", "sports", "gameplay"]);
 const captionTimingStrategySchema = z.enum(["word", "segment", "estimated"]);
 const sceneIntervalSchema = z.object({
   startSec: z.number().finite().nonnegative(),
@@ -27,6 +28,7 @@ const cropTrackSchema = z.object({
   timebase: z.literal("absolute-video-seconds"),
   coordinateSpace: z.literal("normalized"),
   subjectId: z.string().optional(),
+  kind: z.enum(["face", "action"]).optional(),
   tracks: z.array(z.object({
     startSec: z.number().finite().nonnegative(),
     endSec: z.number().finite().positive(),
@@ -51,6 +53,7 @@ const stageMetadataSchema = z.object({
   renderStats: z.array(z.object({
     clipId: z.string(),
     cropStrategy: cropStrategySchema,
+    renderMode: renderModeSchema,
     cropKeyframeCount: z.number(),
     captionTimingStrategy: captionTimingStrategySchema.nullable(),
     captionPhraseCount: z.number().nullable(),

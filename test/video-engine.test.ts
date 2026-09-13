@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCaptionTrack, escapeAssText, getCaptionPreset, clipTranscriptWords, segmentCaptionWords } from "../worker/src/captions";
+import { buildAssFile, buildCaptionTrack, escapeAssText, getCaptionPreset, clipTranscriptWords, segmentCaptionWords } from "../worker/src/captions";
 import { buildCropPlan, choosePrimaryCropTrack, calculateCropGeometry, smoothFocusPoints, type CropPlan } from "../worker/src/crop";
 import { normalizeFaceTrackerResponse } from "../worker/src/face-tracking";
-import { buildPositionExpression, buildSceneIntervals, buildVerticalVideoFilter, cleanSceneTimestamps, FINAL_AUDIO_FILTER } from "../worker/src/ffmpeg";
+import { buildGameplayVideoFilter, buildPositionExpression, buildSceneIntervals, buildVerticalVideoFilter, cleanSceneTimestamps, FINAL_AUDIO_FILTER } from "../worker/src/ffmpeg";
 import type { CropTrack, CropTrackPoint, TranscriptWord } from "../worker/src/media-types";
 
 const landscape = { width: 1920, height: 1080, fps: 30 };
@@ -24,6 +24,7 @@ function track(overrides: Partial<CropTrack> = {}): CropTrack {
     clipId: "clip-1",
     timebase: "absolute-video-seconds",
     coordinateSpace: "normalized",
+    kind: "face",
     tracks: [point()],
     ...overrides,
   };
@@ -129,6 +130,14 @@ test("face tracker responses are normalized per clip and malformed data is ignor
   assert.deepEqual(normalizeFaceTrackerResponse({ unexpected: "shape" }, { projectId: "project", videoId: "video", proxyObjectKey: null, clips: [{ id: "clip-1", startSec: 0, endSec: 2 }] }), []);
 });
 
+test("sports tracking is marked as action tracking and drives the dynamic crop", () => {
+  const [actionTrack] = normalizeFaceTrackerResponse({ tracks: [{ clipId: "clip-1", tracks: [{ startSec: 0, endSec: 2, focusX: 0.7, focusY: 0.5, confidence: 0.95 }] }] }, { projectId: "project", videoId: "video", proxyObjectKey: "proxy", clips: [{ id: "clip-1", startSec: 0, endSec: 2, trackingMode: "action" }] });
+  assert.equal(actionTrack?.kind, "action");
+  const plan = buildCropPlan({ clipId: "clip-1", clipStartSec: 0, clipEndSec: 2, source: landscape, cropTrack: actionTrack });
+  assert.equal(plan.strategy, "action_track");
+  assert.match(buildVerticalVideoFilter(plan, undefined, "sports"), /^crop=/);
+});
+
 test("absolute transcript words become clip-relative timestamps", () => {
   const words: TranscriptWord[] = [
     { startSec: 124.3, endSec: 124.55, text: "This" },
@@ -198,6 +207,21 @@ test("ASS escaping protects text and dynamic crop uses a bounded expression", ()
   assert.match(expression, /if\(/);
   assert.match(expression, /\\,/);
   assert.match(buildVerticalVideoFilter(plan), /scale=1080:1920/);
+});
+
+test("full-frame fallback uses a blurred fill and gameplay uses a split compositor", () => {
+  const plan = buildCropPlan({ clipId: "clip-1", clipStartSec: 0, clipEndSec: 4, source: landscape });
+  assert.match(buildVerticalVideoFilter(plan, undefined, "fit"), /boxblur=32:16/);
+  assert.match(buildVerticalVideoFilter(plan, undefined, "sports"), /force_original_aspect_ratio=decrease/);
+  assert.match(buildGameplayVideoFilter("captions.ass"), /vstack=inputs=2/);
+});
+
+test("hook and CTA overlays are emitted in safe zones", () => {
+  const track = buildCaptionTrack({ text: "One useful sentence", durationSec: 8, presetKey: "bold-viral" });
+  const ass = buildAssFile(track, getCaptionPreset("bold-viral"), { hookText: "Watch this", showHook: true, ctaText: "Follow for more", showCta: true });
+  assert.match(ass, /Style: Hook/);
+  assert.match(ass, /WATCH THIS/);
+  assert.match(ass, /Follow for more/);
 });
 
 test("static crop positions stay compact for untracked clips", () => {

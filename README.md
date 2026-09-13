@@ -34,9 +34,9 @@ Each project runs through these durable workflow stages:
 2. `transcribe` calls the configured ElevenLabs Scribe or legacy Whisper-compatible service.
 3. `analyse` asks g0i.ai for structured clip candidates and validates the JSON with Zod.
 4. `scene_detect` records FFmpeg scene changes.
-5. `face_track` calls an optional provider through a normalized crop-track contract. Tracks are persisted in absolute source-video seconds with normalized focus coordinates; unavailable, malformed, or low-confidence tracking falls back to deterministic centre framing.
-6. `caption_render` selects clip-scoped transcript words when available, segments them into readable phrases, and writes safe-zone ASS captions with preset-specific active-word highlighting.
-7. `clip_render` builds a reusable crop plan, smooths focal movement, resets at scene boundaries, dynamically reframes the source to 1080x1920, burns captions, and uploads MP4s.
+5. `face_track` calls an optional provider through a normalized crop-track contract. Each clip requests face or sports-action tracking; tracks use absolute source-video seconds and normalized focus coordinates.
+6. `caption_render` selects clip-scoped transcript words, writes safe-zone ASS captions with active-word highlighting, and can add opening hook and closing CTA overlays.
+7. `clip_render` creates 1080x1920 H.264/AAC output in auto crop, full-frame blurred fill, sports tracking, or source-plus-gameplay split mode. It preserves embedded audio tracks for per-clip selection and normalizes final loudness.
 8. `thumbnail_render` creates poster frames.
 
 Convex records every stage in `renderJobs` and is the durable queue. Workers poll the authenticated Convex claim endpoint only when they have capacity. A claim is one atomic mutation from `queued` to `running`; it records the worker, attempt, heartbeat, and lease. The workflow waits on one stable event name per render job, so a requeued attempt can still resume the same workflow stage. Worker callbacks are attempt-scoped and idempotent before the workflow applies returned object keys and metadata.
@@ -170,7 +170,7 @@ The worker exposes only `GET /health`; it no longer accepts pushed jobs. It poll
 
 Run `npm run worker:check` before starting traffic. It reports FFmpeg, FFprobe, subtitles/libass, yt-dlp, storage, transcription, and optional face-tracker capability without printing paths or credentials. Missing FFmpeg, FFprobe, subtitles, storage, or a configured transcription provider makes health return 503; yt-dlp and face tracking are optional for upload processing. Railway's injected `PORT` is authoritative when present; `WORKER_PORT` is only the local fallback.
 
-Failed projects can resume through authenticated `POST /api/projects/[projectId]/retry`. The backend preserves applied stages and starts a new workflow at the first incomplete stage. A user may process at most three projects concurrently; upload signing, project creation, retry, and metadata regeneration also use per-user token-bucket limits.
+Failed projects can resume through authenticated `POST /api/projects/[projectId]/retry`. Completed clips can be edited and requeued through `POST /api/clips/[clipId]/render`; gameplay uploads use a user/project-scoped signed R2 key. The backend preserves applied stages and starts a new workflow at the first incomplete stage. A user may process at most three projects concurrently; upload signing, project creation, retry, and metadata regeneration also use per-user token-bucket limits.
 
 ### 5. Stripe
 
@@ -214,7 +214,7 @@ Deploy the worker as a separate Railway service from this repository. Set the se
 - The automated reliability suite uses `convex-test` and mocked HTTP delivery. Run a disposable, credentialed Convex/R2/ElevenLabs environment with a generated long video before paid traffic; the normal test command intentionally needs no external account.
 - `worker/src/media-security.ts` is the explicit malware/file-scanner integration boundary. No malware engine is bundled, and FFprobe validation is not presented as malware protection.
 - Expired upload intents are recorded but R2 deletion requires a separately deployed cleanup process with access to both Convex cleanup candidates and the bucket. Attached sources are retained for project retry.
-- Face tracking remains an integration boundary, not an embedded model. Set `FACE_TRACKER_URL` and optionally `FACE_TRACKER_API_KEY` when a provider is available. The worker validates provider responses, chooses a stable primary subject, smooths crop movement, and keeps rendering with centre framing when the provider is unavailable.
+- Face and sports-action tracking remain an integration boundary, not an embedded model. Set `FACE_TRACKER_URL` and optionally `FACE_TRACKER_API_KEY` when a provider is available. Each requested clip includes `trackingMode: "face" | "action"`; returned action tracks are rendered dynamically, while unavailable sports tracking falls back to a full-frame blurred layout so the play is not cropped away.
 - Caption files use word-level phrase timing and active-word ASS events when timestamps are available, then fall back to segment timing or evenly estimated text timing.
 - YouTube ingestion uses `yt-dlp`. Only process content the account is allowed to download, and review platform terms before launch.
 - The Creator plan is wired. Add Studio price IDs, plan-specific credit allocations, metered overage policy, refunds, and failed-payment handling before offering those publicly.

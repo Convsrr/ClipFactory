@@ -19,6 +19,12 @@ export function presentClip(clip: Doc<"clips">) {
     finalUrl: clip.finalUrl ?? null,
     thumbnailUrl: clip.thumbnailUrl ?? null,
     captionStyle: clip.captionPresetKey,
+    renderMode: clip.renderMode ?? "auto",
+    showHook: clip.showHook ?? true,
+    showCta: clip.showCta ?? false,
+    ctaText: clip.ctaText ?? "Follow for more",
+    hasGameplayVideo: Boolean(clip.gameplayObjectKey),
+    audioTrackIndex: clip.audioTrackIndex ?? 0,
   };
 }
 

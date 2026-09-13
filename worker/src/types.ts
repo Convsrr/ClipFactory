@@ -3,6 +3,7 @@ import {
   captionPresetKeySchema,
   captionTimingStrategySchema,
   cropTrackSchema,
+  renderModeSchema,
   sceneIntervalSchema,
   transcriptSegmentSchema,
   transcriptWordSchema,
@@ -26,6 +27,13 @@ const workerClipSchema = z.object({
   cropTrack: cropTrackSchema.nullable().default(null),
   captionTimingStrategy: captionTimingStrategySchema.nullable().default(null),
   captionPhraseCount: z.number().int().nonnegative().nullable().default(null),
+  renderMode: renderModeSchema.default("auto"),
+  showHook: z.boolean().default(true),
+  showCta: z.boolean().default(false),
+  hookText: z.string().max(180).default(""),
+  ctaText: z.string().max(120).default("Follow for more"),
+  gameplayObjectKey: z.string().max(800).nullable().default(null),
+  audioTrackIndex: z.number().int().min(0).max(15).default(0),
 }).refine((value) => value.endSec > value.startSec, { message: "Clip endSec must be greater than startSec" });
 
 export type WorkerClip = z.infer<typeof workerClipSchema>;

@@ -233,6 +233,67 @@ export const retryFailedProject = mutation({
   },
 });
 
+export const rerenderClip = mutation({
+  args: {
+    clipId: v.string(),
+    hook: v.string(),
+    title: v.string(),
+    description: v.string(),
+    captionPresetKey: v.union(v.literal("bold-viral"), v.literal("minimal-clean"), v.literal("podcast")),
+    renderMode: v.union(v.literal("auto"), v.literal("fit"), v.literal("sports"), v.literal("gameplay")),
+    showHook: v.boolean(),
+    showCta: v.boolean(),
+    ctaText: v.string(),
+    gameplayObjectKey: v.optional(v.union(v.string(), v.null())),
+    audioTrackIndex: v.number(),
+  },
+  returns: v.object({ workflowId: v.string(), startStage: v.literal("face_track") }),
+  handler: async (ctx, args): Promise<{ workflowId: string; startStage: "face_track" }> => {
+    const userId = await requireUserId(ctx);
+    await rateLimit(ctx, { name: "projectRetry", key: userId, throws: true });
+    const clipId = ctx.db.normalizeId("clips", args.clipId);
+    if (!clipId) throw new Error("Clip not found");
+    const clip = await ctx.db.get(clipId);
+    if (!clip || clip.userId !== userId) throw new Error("Clip not found");
+    const [project, videoRows, jobs] = await Promise.all([
+      ctx.db.get(clip.projectId),
+      ctx.db.query("videos").withIndex("by_projectId", (q) => q.eq("projectId", clip.projectId)).take(1),
+      ctx.db.query("renderJobs").withIndex("by_projectId", (q) => q.eq("projectId", clip.projectId)).order("desc").take(64),
+    ]);
+    if (!project || project.userId !== userId || !videoRows[0]) throw new Error("Clip project is incomplete");
+    if (project.status === "processing" || jobs.some((job) => job.status === "queued" || job.status === "running")) throw new Error("This project is already processing");
+
+    const hook = cleanClipText(args.hook, "Hook", 180);
+    const title = cleanClipText(args.title, "Title", 180);
+    const description = cleanClipText(args.description, "Description", 2_000);
+    const ctaText = cleanClipText(args.ctaText, "CTA", 120);
+    if (!Number.isInteger(args.audioTrackIndex) || args.audioTrackIndex < 0 || args.audioTrackIndex > 15) throw new Error("Audio track must be between 1 and 16");
+    const gameplayObjectKey = args.gameplayObjectKey === undefined ? clip.gameplayObjectKey : args.gameplayObjectKey ?? undefined;
+    if (args.renderMode === "gameplay") {
+      if (!gameplayObjectKey) throw new Error("Upload a gameplay video before choosing Game video mode");
+      const expectedPrefix = `${userId}/projects/${clip.projectId}/gameplay/`;
+      if (!gameplayObjectKey.startsWith(expectedPrefix) || gameplayObjectKey.includes("..") || gameplayObjectKey.includes("\\")) throw new Error("Gameplay video does not belong to this project");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(clipId, {
+      hook, title, description,
+      captionPresetKey: args.captionPresetKey,
+      renderMode: args.renderMode,
+      showHook: args.showHook,
+      showCta: args.showCta,
+      ctaText,
+      gameplayObjectKey,
+      audioTrackIndex: args.audioTrackIndex,
+      status: "queued",
+      updatedAt: now,
+    });
+    await ctx.db.patch(project._id, { status: "processing", activeStage: "face_track", progress: progressAfterStage("scene_detect"), errorMessage: undefined, updatedAt: now });
+    const workflowId = await beginWorkflow(ctx, project._id, videoRows[0]._id, "face_track");
+    return { workflowId, startStage: "face_track" };
+  },
+});
+
 export const repairFailedProject = mutation({
   args: { projectId: v.string() },
   returns: v.object({ repaired: v.boolean(), clipCount: v.number() }),
@@ -315,6 +376,12 @@ function cleanTitle(value: string) {
   const title = value.trim().replace(/\s+/g, " ");
   if (!title || title.length > 140) throw new Error("Project title must contain 1 to 140 characters");
   return title;
+}
+
+function cleanClipText(value: string, label: string, maximumLength: number) {
+  const text = value.trim().replace(/\s+/g, " ");
+  if (!text || text.length > maximumLength) throw new Error(`${label} must contain 1 to ${maximumLength} characters`);
+  return text;
 }
 
 function cleanFilename(value: string) {

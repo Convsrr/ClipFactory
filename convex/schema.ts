@@ -244,6 +244,12 @@ export default defineSchema({
     thumbnailObjectKey: v.optional(v.string()),
     captionStyleId: v.optional(v.id("captionStyles")),
     captionPresetKey: v.union(v.literal("bold-viral"), v.literal("minimal-clean"), v.literal("podcast")),
+    renderMode: v.optional(v.union(v.literal("auto"), v.literal("fit"), v.literal("sports"), v.literal("gameplay"))),
+    showHook: v.optional(v.boolean()),
+    showCta: v.optional(v.boolean()),
+    ctaText: v.optional(v.string()),
+    gameplayObjectKey: v.optional(v.string()),
+    audioTrackIndex: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

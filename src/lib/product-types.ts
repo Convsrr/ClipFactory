@@ -30,6 +30,12 @@ export type ClipSummary = {
   finalUrl: string | null;
   thumbnailUrl: string | null;
   captionStyle: "bold-viral" | "minimal-clean" | "podcast";
+  renderMode: "auto" | "fit" | "sports" | "gameplay";
+  showHook: boolean;
+  showCta: boolean;
+  ctaText: string;
+  hasGameplayVideo: boolean;
+  audioTrackIndex: number;
 };
 
 export type ProjectSummary = {

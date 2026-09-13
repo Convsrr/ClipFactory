@@ -18,6 +18,7 @@ type CropTrack = {
   timebase: "absolute-video-seconds";
   coordinateSpace: "normalized";
   subjectId?: string;
+  kind?: "face" | "action";
   tracks: CropTrackPoint[];
 };
 
@@ -45,6 +46,8 @@ export const payload = internalQuery({
       cropTrack: v.union(cropTrackValidator, v.null()),
       captionTimingStrategy: v.union(captionTimingStrategyValidator, v.null()),
       captionPhraseCount: v.union(v.number(), v.null()),
+      renderMode: v.union(v.literal("auto"), v.literal("fit"), v.literal("sports"), v.literal("gameplay")),
+      showHook: v.boolean(), showCta: v.boolean(), hookText: v.string(), ctaText: v.string(), gameplayObjectKey: v.union(v.string(), v.null()), audioTrackIndex: v.number(),
     })),
   }),
   handler: async (ctx, args) => {
@@ -105,6 +108,13 @@ export const payload = internalQuery({
         cropTrack: cropTracks.find((track) => track.clipId === (clip._id as string)) ?? null,
         captionTimingStrategy: captionTiming.find((item) => item.clipId === (clip._id as string))?.timingStrategy ?? null,
         captionPhraseCount: captionTiming.find((item) => item.clipId === (clip._id as string))?.phraseCount ?? null,
+        renderMode: clip.renderMode ?? "auto",
+        showHook: clip.showHook ?? true,
+        showCta: clip.showCta ?? false,
+        hookText: clip.hook,
+        ctaText: clip.ctaText ?? "Follow for more",
+        gameplayObjectKey: clip.gameplayObjectKey ?? null,
+        audioTrackIndex: clip.audioTrackIndex ?? 0,
       })),
     };
   },
@@ -154,6 +164,7 @@ function stageMetadata(value: unknown): Record<string, unknown> | null {
 
 function isCropTrack(value: unknown): value is CropTrack {
   if (!isRecord(value) || typeof value.clipId !== "string" || value.timebase !== "absolute-video-seconds" || value.coordinateSpace !== "normalized") return false;
+  if (value.kind !== undefined && value.kind !== "face" && value.kind !== "action") return false;
   return arrayValue(value.tracks).every((track) => isRecord(track) && isFiniteNumber(track.startSec) && isFiniteNumber(track.endSec) && track.endSec > track.startSec && isFiniteNumber(track.focusX) && track.focusX >= 0 && track.focusX <= 1 && isFiniteNumber(track.focusY) && track.focusY >= 0 && track.focusY <= 1 && isFiniteNumber(track.confidence) && track.confidence >= 0 && track.confidence <= 1);
 }
 

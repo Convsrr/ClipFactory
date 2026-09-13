@@ -61,6 +61,10 @@ export type CaptionFileOptions = {
   clipEndSec?: number;
   words?: TranscriptWord[];
   segments?: TranscriptSegment[];
+  hookText?: string;
+  ctaText?: string;
+  showHook?: boolean;
+  showCta?: boolean;
 };
 
 const CAPTION_PRESETS: Record<CaptionPresetKey, CaptionPreset> = {
@@ -221,12 +225,12 @@ export async function writeCaptionFile(
     : optionsOrText;
   const preset = getCaptionPreset(options.presetKey);
   const track = buildCaptionTrack(options);
-  const ass = buildAssFile(track, preset);
+  const ass = buildAssFile(track, preset, options);
   await writeFile(path, ass, "utf8");
   return track;
 }
 
-export function buildAssFile(track: CaptionTrack, preset: CaptionPreset): string {
+export function buildAssFile(track: CaptionTrack, preset: CaptionPreset, overlays: Pick<CaptionFileOptions, "hookText" | "ctaText" | "showHook" | "showCta"> = {}): string {
   const events = track.phrases.flatMap((phrase) => {
     if (track.timingStrategy === "word" && preset.wordHighlight && phrase.words.length > 1) {
       return phrase.words.map((_, index) => ({
@@ -244,6 +248,15 @@ export function buildAssFile(track: CaptionTrack, preset: CaptionPreset): string
       ? [`Dialogue: 0,${assTime(event.startSec)},${assTime(endSec)},Default,,0,0,0,,${event.text}`]
       : [];
   });
+  const overlayLines: string[] = [];
+  const hookText = overlays.hookText?.trim();
+  if (overlays.showHook !== false && hookText) {
+    overlayLines.push(`Dialogue: 1,0:00:00.00,${assTime(Math.min(track.durationSec, 4))},Hook,,72,72,105,,${escapeAssText(hookText.toUpperCase())}`);
+  }
+  const ctaText = overlays.ctaText?.trim();
+  if (overlays.showCta && ctaText && track.durationSec > 0.5) {
+    overlayLines.push(`Dialogue: 2,${assTime(Math.max(0, track.durationSec - 3))},${assTime(track.durationSec)},CTA,,110,110,120,,${escapeAssText(ctaText)}`);
+  }
   const lines = [
     "[Script Info]",
     "ScriptType: v4.00+",
@@ -255,10 +268,13 @@ export function buildAssFile(track: CaptionTrack, preset: CaptionPreset): string
     "[V4+ Styles]",
     "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
     `Style: Default,${preset.fontFamily},${preset.fontSize},${preset.primaryColour},${preset.highlightColour},${preset.outlineColour},${preset.backgroundColour},${preset.fontWeight >= 700 ? -1 : 0},0,0,0,100,100,0,0,1,${preset.outline},${preset.shadow},${preset.alignment},${preset.marginL},${preset.marginR},${preset.marginV},1`,
+    "Style: Hook,Arial,58,&H00FFFFFF,&H00FFFFFF,&H00111111,&H88000000,-1,0,0,0,100,100,0,0,3,3,0,8,72,72,105,1",
+    "Style: CTA,Arial,44,&H00111111,&H00111111,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,2,0,2,110,110,120,1",
     "",
     "[Events]",
     "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
     ...eventLines,
+    ...overlayLines,
     "",
   ];
   return lines.join("\n");

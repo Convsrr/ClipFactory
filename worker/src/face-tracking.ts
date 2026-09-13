@@ -7,6 +7,7 @@ export type FaceTrackingClip = {
   id: string;
   startSec: number;
   endSec: number;
+  trackingMode?: "face" | "action";
 };
 
 export type FaceTrackingRequest = {
@@ -65,7 +66,7 @@ export class HttpFaceTrackingProvider implements FaceTrackingProvider {
       }
       const cropTracks = normalizeFaceTrackerResponse(payload, request);
       return cropTracks.length
-        ? { cropTracks, cropStrategy: "face_track", tracker: "http" }
+        ? { cropTracks, cropStrategy: cropTracks.some((track) => track.kind === "action") ? "action_track" : "face_track", tracker: "http" }
         : fallbackResult("Face tracker returned no usable tracks");
     } catch (error) {
       return fallbackResult(error instanceof Error && error.name === "AbortError" ? "Face tracker timed out" : "Face tracker request failed");
@@ -114,7 +115,7 @@ function extractCandidates(payload: unknown, request: FaceTrackingRequest): Crop
       .filter((point): point is CropTrackPoint => point !== null)
       .sort((a, b) => a.startSec - b.startSec || b.confidence - a.confidence);
     if (!tracks.length) continue;
-    candidates.push({ clipId: clip.id, timebase: "absolute-video-seconds", coordinateSpace: "normalized", ...(subjectId ? { subjectId } : {}), tracks });
+    candidates.push({ clipId: clip.id, timebase: "absolute-video-seconds", coordinateSpace: "normalized", kind: clip.trackingMode === "action" ? "action" : "face", ...(subjectId ? { subjectId } : {}), tracks });
   }
   const merged = new Map<string, CropTrack>();
   for (const candidate of candidates) {

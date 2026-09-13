@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const cropStrategySchema = z.enum([
   "face_track",
+  "action_track",
   "static_face",
   "source_center",
   "scene_aware_center",
@@ -9,6 +10,9 @@ export const cropStrategySchema = z.enum([
 ]);
 
 export type CropStrategy = z.infer<typeof cropStrategySchema>;
+
+export const renderModeSchema = z.enum(["auto", "fit", "sports", "gameplay"]);
+export type RenderMode = z.infer<typeof renderModeSchema>;
 
 export const cropTrackPointSchema = z.object({
   startSec: z.number().finite().nonnegative(),
@@ -28,6 +32,7 @@ export const cropTrackSchema = z.object({
   timebase: z.literal("absolute-video-seconds"),
   coordinateSpace: z.literal("normalized"),
   subjectId: z.string().min(1).optional(),
+  kind: z.enum(["face", "action"]).default("face"),
   tracks: z.array(cropTrackPointSchema).max(10_000),
 });
 
@@ -78,6 +83,7 @@ export type CaptionTimingSummary = {
 export type RenderStat = {
   clipId: string;
   cropStrategy: CropStrategy;
+  renderMode: RenderMode;
   cropKeyframeCount: number;
   captionTimingStrategy: CaptionTimingStrategy | null;
   captionPhraseCount: number | null;
