@@ -1,7 +1,7 @@
 import { choosePrimaryCropTrack } from "./crop.js";
 import { cropTrackSchema, type CropTrack, type CropTrackPoint, type CropStrategy } from "./media-types.js";
 
-const FACE_TRACKER_TIMEOUT_MS = 15_000;
+const DEFAULT_FACE_TRACKER_TIMEOUT_MS = 120_000;
 
 export type FaceTrackingClip = {
   id: string;
@@ -39,7 +39,7 @@ export class HttpFaceTrackingProvider implements FaceTrackingProvider {
 
   async track(request: FaceTrackingRequest): Promise<FaceTrackingResult> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FACE_TRACKER_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), faceTrackerTimeoutMs());
     try {
       const response = await this.fetchImpl(this.endpoint, {
         method: "POST",
@@ -74,6 +74,11 @@ export class HttpFaceTrackingProvider implements FaceTrackingProvider {
       clearTimeout(timeout);
     }
   }
+}
+
+function faceTrackerTimeoutMs() {
+  const configured = Number.parseInt(process.env.FACE_TRACKER_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(configured) ? Math.min(300_000, Math.max(15_000, configured)) : DEFAULT_FACE_TRACKER_TIMEOUT_MS;
 }
 
 export function createFaceTrackingProvider(): FaceTrackingProvider | null {
